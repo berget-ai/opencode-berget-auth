@@ -67,20 +67,16 @@ opencode --model google/gemini-2.5-pro-preview-06-05
 
 You can customize the Berget provider in your `opencode.json`:
 
+The plugin will automatically configure models, but you can override in `opencode.json`:
+
 ```json
 {
   "provider": {
     "berget": {
       "api": "https://api.berget.ai/v1",
       "models": {
-        "anthropic/claude-sonnet-4-20250514": {},
-        "anthropic/claude-opus-4-20250514": {},
-        "openai/gpt-4o": {},
-        "openai/gpt-4o-mini": {},
-        "google/gemini-2.5-pro-preview-06-05": {},
-        "mistral/mistral-large-latest": {},
-        "deepseek/deepseek-chat": {},
-        "deepseek/deepseek-reasoner": {}
+        "meta-llama/Llama-3.3-70B-Instruct": {},
+        "mistralai/Mistral-Small-3.2-24B-Instruct-2506": {}
       }
     }
   }
@@ -89,19 +85,16 @@ You can customize the Berget provider in your `opencode.json`:
 
 ## Available Models
 
-Berget provides access to a variety of AI models:
+Models are fetched dynamically from the Berget API. The plugin automatically discovers all available text/chat models that are currently online.
 
-| Provider | Model | Description |
-|----------|-------|-------------|
-| Anthropic | claude-sonnet-4-20250514 | Claude Sonnet 4 |
-| Anthropic | claude-opus-4-20250514 | Claude Opus 4 |
-| OpenAI | gpt-4o | GPT-4 Omni |
-| OpenAI | gpt-4o-mini | GPT-4 Omni Mini |
-| Google | gemini-2.5-pro-preview-06-05 | Gemini 2.5 Pro |
-| Google | gemini-2.5-flash-preview-05-20 | Gemini 2.5 Flash |
-| Mistral | mistral-large-latest | Mistral Large |
-| DeepSeek | deepseek-chat | DeepSeek Chat |
-| DeepSeek | deepseek-reasoner | DeepSeek Reasoner |
+For the current model list, visit: https://api.berget.ai/v1/models
+
+Common models include:
+- `meta-llama/Llama-3.3-70B-Instruct` - Llama 3.3 70B
+- `meta-llama/Llama-3.1-8B-Instruct` - Llama 3.1 8B  
+- `mistralai/Mistral-Small-3.2-24B-Instruct-2506` - Mistral Small 3.2
+- `openai/gpt-oss-120b` - GPT-OSS 120B
+- `zai-org/GLM-4.7` - GLM 4.7
 
 ## Authentication Flow
 

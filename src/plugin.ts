@@ -17,6 +17,7 @@ import { isOAuthAuth, accessTokenExpired } from "./plugin/auth";
 import { resolveCachedAuth, storeCachedAuth } from "./plugin/cache";
 import { logDebug, logError } from "./plugin/debug";
 import { createDeviceFlowAuthorizeMethod } from "./plugin/device-flow";
+import { fetchBergetModels } from "./plugin/models";
 import { refreshAccessTokenDirect } from "./plugin/token";
 import type { PluginInput, Hooks, OAuthAuthDetails } from "./plugin/types";
 
@@ -44,23 +45,14 @@ export const BergetAuthPlugin = async ({
         config.provider = {};
       }
 
-      // Ensure Berget provider exists with default models
+      // Ensure Berget provider exists - fetch models dynamically
       if (!config.provider.berget) {
+        const models = await fetchBergetModels();
         config.provider.berget = {
           api: BERGET_INFERENCE_URL,
-          models: {
-            // Default models available on Berget
-            "anthropic/claude-sonnet-4-20250514": {},
-            "anthropic/claude-opus-4-20250514": {},
-            "openai/gpt-4o": {},
-            "openai/gpt-4o-mini": {},
-            "google/gemini-2.5-pro-preview-06-05": {},
-            "google/gemini-2.5-flash-preview-05-20": {},
-            "mistral/mistral-large-latest": {},
-            "deepseek/deepseek-chat": {},
-            "deepseek/deepseek-reasoner": {},
-          },
+          models,
         };
+        logDebug(`Configured Berget with ${Object.keys(models).length} models`);
       }
     },
 
