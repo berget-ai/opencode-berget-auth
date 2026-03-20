@@ -167,11 +167,10 @@ MIT
 
 ## About Berget AI
 
-[Berget AI](https://berget.ai) provides European AI infrastructure, offering:
+[Berget AI](https://berget.ai) champions AI sovereignty to unlock innovation and growth in Europe. 
 
-- **GDPR Compliance** - Data stays in Europe
-- **Sustainable Hosting** - Powered by renewable energy in Sweden
-- **Multi-Model Access** - One API for all major AI providers
-- **Enterprise Ready** - SOC 2 Type II certified
+- **Sovereign AI** - All data stays within EU borders, full compliance with EU regulations
+- **Open AI** - Built on open source, hosting open models
+- **Sustainable AI** - 100% fossil-free energy, CO₂ tracking, circular hardware
 
 Learn more at [berget.ai](https://berget.ai)
