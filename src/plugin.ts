@@ -14,7 +14,6 @@
 import type { Auth, Provider, Config } from "@opencode-ai/sdk";
 import { BERGET_PROVIDER_ID, BERGET_INFERENCE_URL } from "./constants";
 import { isOAuthAuth, accessTokenExpired } from "./plugin/auth";
-import { resolveCachedAuth, storeCachedAuth } from "./plugin/cache";
 import { logDebug, logError } from "./plugin/debug";
 import { createDeviceFlowAuthorizeMethod } from "./plugin/device-flow";
 import { fetchBergetModels } from "./plugin/models";
@@ -74,24 +73,21 @@ export const BergetAuthPlugin = async ({
           return {};
         }
 
-        // Seed the in-memory cache with the stored auth
-        const authRecord = auth as OAuthAuthDetails;
-        storeCachedAuth(authRecord);
+        // Mutable reference to current auth state, shared between all requests.
+        // Updated in-place after each refresh so subsequent requests see the fresh token.
+        let currentAuth = auth as OAuthAuthDetails;
 
         // Return custom fetch that refreshes the token per-request.
         // OpenCode only calls loader once at startup and caches apiKey,
         // but fetch is called on every API request by @ai-sdk/openai-compatible.
         return {
-          apiKey: authRecord.access || "",
+          apiKey: currentAuth.access || "",
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            let current = resolveCachedAuth(authRecord);
-
-            if (accessTokenExpired(current)) {
+            if (accessTokenExpired(currentAuth)) {
               logDebug("Token expired, refreshing before request...");
-              const refreshed = await refreshAccessTokenDirect(current);
+              const refreshed = await refreshAccessTokenDirect(currentAuth);
               if (refreshed) {
-                current = refreshed;
-                storeCachedAuth(refreshed);
+                currentAuth = refreshed;
                 logDebug("Token refreshed successfully");
               } else {
                 logError("Token refresh failed");
@@ -99,8 +95,8 @@ export const BergetAuthPlugin = async ({
             }
 
             const headers = new Headers(init?.headers);
-            if (current.access) {
-              headers.set("Authorization", `Bearer ${current.access}`);
+            if (currentAuth.access) {
+              headers.set("Authorization", `Bearer ${currentAuth.access}`);
             }
 
             return fetch(input, {
