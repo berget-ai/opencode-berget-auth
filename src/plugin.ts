@@ -69,30 +69,22 @@ export const BergetAuthPlugin = async ({
       ): Promise<Record<string, unknown>> => {
         const auth = await getAuth();
 
-        // Only handle OAuth auth (not API keys)
+        // API key users don't need custom fetch -- keys don't expire
         if (!isOAuthAuth(auth as OAuthAuthDetails)) {
-          logDebug("Non-OAuth auth detected, skipping custom fetch");
           return {};
         }
 
-        let authRecord = resolveCachedAuth(auth as OAuthAuthDetails);
+        // Seed the in-memory cache with the stored auth
+        const authRecord = auth as OAuthAuthDetails;
+        storeCachedAuth(authRecord);
 
-        // Refresh immediately if expired at startup
-        if (accessTokenExpired(authRecord)) {
-          const refreshed = await refreshAccessTokenDirect(authRecord);
-          if (refreshed) {
-            authRecord = refreshed;
-            storeCachedAuth(authRecord);
-          }
-        }
-
-        // Return apiKey for initial request + custom fetch for token refresh
+        // Return custom fetch that refreshes the token per-request.
+        // OpenCode only calls loader once at startup and caches apiKey,
+        // but fetch is called on every API request by @ai-sdk/openai-compatible.
         return {
           apiKey: authRecord.access || "",
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            // Check if token needs refresh before each request
-            const currentAuth = await getAuth();
-            let current = resolveCachedAuth(currentAuth as OAuthAuthDetails);
+            let current = resolveCachedAuth(authRecord);
 
             if (accessTokenExpired(current)) {
               logDebug("Token expired, refreshing before request...");
@@ -106,7 +98,6 @@ export const BergetAuthPlugin = async ({
               }
             }
 
-            // Replace Authorization header with fresh token
             const headers = new Headers(init?.headers);
             if (current.access) {
               headers.set("Authorization", `Bearer ${current.access}`);
