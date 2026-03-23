@@ -82,7 +82,7 @@ export const BergetAuthPlugin = async ({
         // but fetch is called on every API request by @ai-sdk/openai-compatible.
         return {
           apiKey: currentAuth.access || "",
-          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+          fetch: async (input: string | URL | Request, init?: RequestInit) => {
             if (accessTokenExpired(currentAuth)) {
               logDebug("Token expired, refreshing before request...");
               const refreshed = await refreshAccessTokenDirect(currentAuth);
