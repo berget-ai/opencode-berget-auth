@@ -60,7 +60,9 @@ export const BergetAuthPlugin = async ({
     auth: {
       provider: BERGET_PROVIDER_ID,
 
-      // Loader is called when making API requests to validate/prepare auth
+      // Loader runs once at startup. We return a custom fetch that
+      // refreshes the token per-request, since OpenCode caches the
+      // apiKey from loader and never calls loader again.
       loader: async (
         getAuth: () => Promise<Auth>,
         _provider: Provider
@@ -69,33 +71,52 @@ export const BergetAuthPlugin = async ({
 
         // Only handle OAuth auth (not API keys)
         if (!isOAuthAuth(auth as OAuthAuthDetails)) {
-          logDebug("Non-OAuth auth detected, returning empty loader result");
+          logDebug("Non-OAuth auth detected, skipping custom fetch");
           return {};
         }
 
-        logDebug("OAuth auth detected, setting up auth loader");
-
-        // Resolve cached auth (may have fresher tokens)
         let authRecord = resolveCachedAuth(auth as OAuthAuthDetails);
 
-        // Refresh token if expired
+        // Refresh immediately if expired at startup
         if (accessTokenExpired(authRecord)) {
-          logDebug("Access token expired, refreshing");
           const refreshed = await refreshAccessTokenDirect(authRecord);
-
-          if (!refreshed) {
-            logError("Failed to refresh token");
-            return {};
+          if (refreshed) {
+            authRecord = refreshed;
+            storeCachedAuth(authRecord);
           }
-
-          authRecord = refreshed;
-          storeCachedAuth(authRecord);
         }
 
-        // Return the access token for the provider to use
+        // Return apiKey for initial request + custom fetch for token refresh
         return {
           apiKey: authRecord.access || "",
-          // Custom fetch could be added here if needed
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            // Check if token needs refresh before each request
+            const currentAuth = await getAuth();
+            let current = resolveCachedAuth(currentAuth as OAuthAuthDetails);
+
+            if (accessTokenExpired(current)) {
+              logDebug("Token expired, refreshing before request...");
+              const refreshed = await refreshAccessTokenDirect(current);
+              if (refreshed) {
+                current = refreshed;
+                storeCachedAuth(refreshed);
+                logDebug("Token refreshed successfully");
+              } else {
+                logError("Token refresh failed");
+              }
+            }
+
+            // Replace Authorization header with fresh token
+            const headers = new Headers(init?.headers);
+            if (current.access) {
+              headers.set("Authorization", `Bearer ${current.access}`);
+            }
+
+            return fetch(input, {
+              ...init,
+              headers,
+            });
+          },
         };
       },
 
