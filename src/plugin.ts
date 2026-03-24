@@ -70,10 +70,6 @@ export const BergetAuthPlugin = async ({
 
         // API key users don't need custom fetch -- keys don't expire
         if (!isOAuthAuth(auth as OAuthAuthDetails)) {
-          const envKey = process.env.BERGET_API_KEY;
-          if (envKey) {
-            return { apiKey: envKey };
-          }
           return {};
         }
 
