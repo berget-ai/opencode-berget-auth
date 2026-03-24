@@ -1,12 +1,15 @@
 {
-  "name": "opencode-berget-auth",
+  "name": "@bergetai/opencode-auth",
   "version": "0.1.0",
   "description": "Berget AI auth plugin for OpenCode - authenticate with your Berget account",
   "module": "index.ts",
   "author": "Berget AI",
-  "repository": "https://github.com/berget-cloud/opencode-berget-auth",
+  "repository": "https://github.com/berget-ai/opencode-berget-auth",
   "license": "MIT",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "index.ts",
     "src"

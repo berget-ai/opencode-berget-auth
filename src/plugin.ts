@@ -14,7 +14,6 @@
 import type { Auth, Provider, Config } from "@opencode-ai/sdk";
 import { BERGET_PROVIDER_ID, BERGET_INFERENCE_URL } from "./constants";
 import { isOAuthAuth, accessTokenExpired } from "./plugin/auth";
-import { resolveCachedAuth, storeCachedAuth } from "./plugin/cache";
 import { logDebug, logError } from "./plugin/debug";
 import { createDeviceFlowAuthorizeMethod } from "./plugin/device-flow";
 import { fetchBergetModels } from "./plugin/models";
@@ -60,42 +59,51 @@ export const BergetAuthPlugin = async ({
     auth: {
       provider: BERGET_PROVIDER_ID,
 
-      // Loader is called when making API requests to validate/prepare auth
+      // Loader runs once at startup. We return a custom fetch that
+      // refreshes the token per-request, since OpenCode caches the
+      // apiKey from loader and never calls loader again.
       loader: async (
         getAuth: () => Promise<Auth>,
         _provider: Provider
       ): Promise<Record<string, unknown>> => {
         const auth = await getAuth();
 
-        // Only handle OAuth auth (not API keys)
+        // API key users don't need custom fetch -- keys don't expire
         if (!isOAuthAuth(auth as OAuthAuthDetails)) {
-          logDebug("Non-OAuth auth detected, returning empty loader result");
           return {};
         }
 
-        logDebug("OAuth auth detected, setting up auth loader");
+        // Mutable reference to current auth state, shared between all requests.
+        // Updated in-place after each refresh so subsequent requests see the fresh token.
+        let currentAuth = auth as OAuthAuthDetails;
 
-        // Resolve cached auth (may have fresher tokens)
-        let authRecord = resolveCachedAuth(auth as OAuthAuthDetails);
-
-        // Refresh token if expired
-        if (accessTokenExpired(authRecord)) {
-          logDebug("Access token expired, refreshing");
-          const refreshed = await refreshAccessTokenDirect(authRecord);
-
-          if (!refreshed) {
-            logError("Failed to refresh token");
-            return {};
-          }
-
-          authRecord = refreshed;
-          storeCachedAuth(authRecord);
-        }
-
-        // Return the access token for the provider to use
+        // Return custom fetch that refreshes the token per-request.
+        // OpenCode only calls loader once at startup and caches apiKey,
+        // but fetch is called on every API request by @ai-sdk/openai-compatible.
         return {
-          apiKey: authRecord.access || "",
-          // Custom fetch could be added here if needed
+          apiKey: currentAuth.access || "",
+          fetch: async (input: string | URL | Request, init?: RequestInit) => {
+            if (accessTokenExpired(currentAuth)) {
+              logDebug("Token expired, refreshing before request...");
+              const refreshed = await refreshAccessTokenDirect(currentAuth);
+              if (refreshed) {
+                currentAuth = refreshed;
+                logDebug("Token refreshed successfully");
+              } else {
+                logError("Token refresh failed");
+              }
+            }
+
+            const headers = new Headers(init?.headers);
+            if (currentAuth.access) {
+              headers.set("Authorization", `Bearer ${currentAuth.access}`);
+            }
+
+            return fetch(input, {
+              ...init,
+              headers,
+            });
+          },
         };
       },
 
