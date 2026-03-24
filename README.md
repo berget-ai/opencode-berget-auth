@@ -10,9 +10,8 @@ The recommended way to get started is with the [Berget CLI](https://www.npmjs.co
 npm install -g berget
 berget code init
 opencode
+# Type /connect → choose your auth method
 ```
-
-This creates an `opencode.json` with the plugin pre-configured. Then run `/connect` in OpenCode to authenticate.
 
 ## Authentication Methods
 
@@ -26,23 +25,17 @@ For team members with a Berget Code seat:
 
 ### API Key
 
-For API key users, set `BERGET_API_KEY` in your environment:
+For API key users:
 
-```bash
-export BERGET_API_KEY=sk_ber_...
-opencode
-```
-
-The plugin picks up the key automatically — no `/connect` needed.
-
-Alternatively, run `/connect` and select "Enter Berget API Key manually".
+1. Run `/connect` in OpenCode
+2. Select "Enter Berget API Key manually"
+3. Paste your key — persisted across sessions
 
 ## How It Works
 
 - **Device Authorization Flow** for SSO login (works in SSH/headless too)
 - **Automatic token refresh** via custom fetch — sessions stay alive indefinitely
 - **Models fetched dynamically** from Berget API — no manual config needed
-- **API key fallback** from `BERGET_API_KEY` environment variable
 
 ## License
 
