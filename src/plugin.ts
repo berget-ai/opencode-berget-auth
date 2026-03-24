@@ -16,7 +16,7 @@ import { BERGET_PROVIDER_ID, BERGET_INFERENCE_URL } from "./constants";
 import { isOAuthAuth, accessTokenExpired } from "./plugin/auth";
 import { logDebug, logError } from "./plugin/debug";
 import { createDeviceFlowAuthorizeMethod } from "./plugin/device-flow";
-import { fetchBergetModels } from "./plugin/models";
+import { getBergetModels } from "./plugin/models";
 import { refreshAccessTokenDirect } from "./plugin/token";
 import type { PluginInput, Hooks, OAuthAuthDetails } from "./plugin/types";
 
@@ -44,9 +44,9 @@ export const BergetAuthPlugin = async ({
         config.provider = {};
       }
 
-      // Ensure Berget provider exists - fetch models dynamically
+      // Ensure Berget provider exists with curated chat models
       if (!config.provider.berget) {
-        const models = await fetchBergetModels();
+        const models = getBergetModels();
         config.provider.berget = {
           api: BERGET_INFERENCE_URL,
           models,
