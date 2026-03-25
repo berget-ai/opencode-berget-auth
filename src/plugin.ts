@@ -44,25 +44,27 @@ export const BergetAuthPlugin = async ({
         config.provider = {};
       }
 
-      // Always set the API URL from env var (allows runtime override)
+      // Always set the API URL and models from env var (allows runtime override)
+      // We always fetch models dynamically to override any stale models in the binary
       const inferenceUrl = getInferenceUrl();
+      const models = await fetchBergetModels();
       
       if (!config.provider.berget) {
-        const models = await fetchBergetModels();
         config.provider.berget = {
           api: inferenceUrl,
           options: { baseURL: inferenceUrl },
           models,
         };
       } else {
-        // Override API URL even if provider exists (from models.json cache)
+        // Override API URL and models even if provider exists (from binary/cache)
         config.provider.berget.api = inferenceUrl;
+        config.provider.berget.models = models;
         if (!config.provider.berget.options) {
           config.provider.berget.options = {};
         }
         config.provider.berget.options.baseURL = inferenceUrl;
       }
-      logDebug(`Berget provider: ${inferenceUrl}`);
+      logDebug(`Berget provider configured: ${inferenceUrl}, ${Object.keys(models).length} models`);
     },
 
     // Authentication configuration
