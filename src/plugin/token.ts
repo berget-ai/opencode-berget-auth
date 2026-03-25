@@ -2,7 +2,7 @@
  * Token refresh logic for Berget OAuth
  */
 
-import { TOKEN_REFRESH_ENDPOINT } from "../constants";
+import { getTokenRefreshEndpoint } from "../constants";
 import { clearCachedAuth, storeCachedAuth } from "./cache";
 import { logDebug } from "./debug";
 import type { OAuthAuthDetails, TokenRefreshResponse } from "./types";
@@ -56,7 +56,7 @@ async function refreshAccessTokenInternal(
   logDebug("Refreshing access token");
 
   try {
-    const response = await fetch(TOKEN_REFRESH_ENDPOINT, {
+    const response = await fetch(getTokenRefreshEndpoint(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

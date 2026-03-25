@@ -5,8 +5,8 @@
 
 import { spawn } from "node:child_process";
 import {
-  DEVICE_AUTH_ENDPOINT,
-  DEVICE_TOKEN_ENDPOINT,
+  getDeviceAuthEndpoint,
+  getDeviceTokenEndpoint,
   DEVICE_POLL_INTERVAL_MS,
   DEVICE_POLL_MAX_ATTEMPTS,
 } from "../constants";
@@ -25,7 +25,7 @@ import type {
 export async function initiateDeviceFlow(): Promise<DeviceAuthResponse> {
   logDebug("Initiating device authorization flow");
 
-  const response = await fetch(DEVICE_AUTH_ENDPOINT, {
+  const response = await fetch(getDeviceAuthEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -75,7 +75,7 @@ export async function pollForToken(
     logDebug(`Poll attempt ${attempts}/${DEVICE_POLL_MAX_ATTEMPTS}`);
 
     try {
-      const response = await fetch(DEVICE_TOKEN_ENDPOINT, {
+      const response = await fetch(getDeviceTokenEndpoint(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
