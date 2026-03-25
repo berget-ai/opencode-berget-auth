@@ -2,7 +2,7 @@
  * Dynamic model fetching from Berget API
  */
 
-import { BERGET_INFERENCE_URL } from "../constants";
+import { getInferenceUrl } from "../constants";
 import { logDebug, logError } from "./debug";
 
 interface BergetModel {
@@ -52,7 +52,7 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
   logDebug("Fetching models from Berget API");
 
   try {
-    const response = await fetch(`${BERGET_INFERENCE_URL}/models`, {
+    const response = await fetch(`${getInferenceUrl()}/models`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",

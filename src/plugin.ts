@@ -12,7 +12,7 @@
  */
 
 import type { Auth, Provider, Config } from "@opencode-ai/sdk";
-import { BERGET_PROVIDER_ID, BERGET_INFERENCE_URL } from "./constants";
+import { BERGET_PROVIDER_ID, getInferenceUrl } from "./constants";
 import { isOAuthAuth, accessTokenExpired } from "./plugin/auth";
 import { logDebug, logError } from "./plugin/debug";
 import { createDeviceFlowAuthorizeMethod } from "./plugin/device-flow";
@@ -44,15 +44,25 @@ export const BergetAuthPlugin = async ({
         config.provider = {};
       }
 
-      // Ensure Berget provider exists - fetch models dynamically
+      // Always set the API URL from env var (allows runtime override)
+      const inferenceUrl = getInferenceUrl();
+      
       if (!config.provider.berget) {
         const models = await fetchBergetModels();
         config.provider.berget = {
-          api: BERGET_INFERENCE_URL,
+          api: inferenceUrl,
+          options: { baseURL: inferenceUrl },
           models,
         };
-        logDebug(`Configured Berget with ${Object.keys(models).length} models`);
+      } else {
+        // Override API URL even if provider exists (from models.json cache)
+        config.provider.berget.api = inferenceUrl;
+        if (!config.provider.berget.options) {
+          config.provider.berget.options = {};
+        }
+        config.provider.berget.options.baseURL = inferenceUrl;
       }
+      logDebug(`Berget provider: ${inferenceUrl}`);
     },
 
     // Authentication configuration
@@ -68,8 +78,20 @@ export const BergetAuthPlugin = async ({
       ): Promise<Record<string, unknown>> => {
         const auth = await getAuth();
 
-        // API key users don't need custom fetch -- keys don't expire
+        // API key users: use custom fetch to inject Bearer token
         if (!isOAuthAuth(auth as OAuthAuthDetails)) {
+          const apiAuth = auth as { type: string; key?: string };
+          if (apiAuth.key) {
+            const apiKey = apiAuth.key;
+            return {
+              apiKey,
+              fetch: async (input: string | URL | Request, init?: RequestInit) => {
+                const headers = new Headers(init?.headers);
+                headers.set("Authorization", `Bearer ${apiKey}`);
+                return fetch(input, { ...init, headers });
+              },
+            };
+          }
           return {};
         }
 
