@@ -15,25 +15,13 @@ export const getApiUrl = () =>
 export const getInferenceUrl = () =>
   process.env.BERGET_INFERENCE_URL || "https://api.berget.ai/v1";
 
-export const getKeycloakUrl = () =>
-  process.env.BERGET_KEYCLOAK_URL || "https://keycloak.berget.ai";
-
-export const getKeycloakRealm = () =>
-  process.env.BERGET_KEYCLOAK_REALM || "berget";
-
-export const getKeycloakClientId = () =>
-  process.env.BERGET_KEYCLOAK_CLIENT_ID || "berget-code";
-
-// Device flow endpoints
+// Device flow endpoints (all auth goes through API, not direct to Keycloak)
 export const getDeviceAuthEndpoint = () => `${getApiUrl()}/v1/auth/device`;
 export const getDeviceTokenEndpoint = () => `${getApiUrl()}/v1/auth/device/token`;
 export const getTokenRefreshEndpoint = () => `${getApiUrl()}/v1/auth/refresh`;
 
-// Keycloak endpoints (fallback)
-export const getKeycloakDeviceEndpoint = () =>
-  `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/auth/device`;
-export const getKeycloakTokenEndpoint = () =>
-  `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/token`;
+// Model discovery endpoint (chat models only, excludes embeddings/rerankers/whisper)
+export const getModelsEndpoint = () => `${getApiUrl()}/v1/models/chat`;
 
 // Token expiry buffer (refresh tokens 1 minute before expiry)
 export const ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;

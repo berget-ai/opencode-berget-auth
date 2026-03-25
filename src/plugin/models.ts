@@ -2,35 +2,21 @@
  * Dynamic model fetching from Berget API
  */
 
-import { getInferenceUrl } from "../constants";
+import { getModelsEndpoint } from "../constants";
 import { logDebug, logError } from "./debug";
 
-interface BergetModel {
+// Response from /v1/models/chat endpoint
+interface ChatModel {
   id: string;
-  name: string;
-  object: string;
-  model_type: string;
-  owned_by: string;
-  capabilities: {
-    vision: boolean;
-    function_calling: boolean;
-    json_mode: boolean;
-    streaming: boolean;
-  };
-  pricing: {
-    input: number;
-    output: number;
-    unit: string;
-    currency: string;
-  };
-  status: {
-    up: boolean;
-  };
+  contextWindow: number;
+  inputPricePerToken: number;
+  outputPricePerToken: number;
+  aliases?: string[];
+  lifecycleState?: string;
 }
 
-interface ModelsResponse {
-  object: string;
-  data: BergetModel[];
+interface ChatModelsResponse {
+  models: ChatModel[];
 }
 
 // Cache for models to avoid repeated API calls
@@ -39,8 +25,8 @@ let cacheTimestamp: number = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Fetches available models from Berget API
- * Only returns text/chat models that are currently up
+ * Fetches available chat models from Berget API
+ * Uses /v1/models/chat which only returns text models (no embeddings, rerankers, whisper)
  */
 export async function fetchBergetModels(): Promise<Record<string, object>> {
   // Return cached models if still valid
@@ -49,10 +35,10 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
     return cachedModels;
   }
 
-  logDebug("Fetching models from Berget API");
+  logDebug("Fetching chat models from Berget API");
 
   try {
-    const response = await fetch(`${getInferenceUrl()}/models`, {
+    const response = await fetch(getModelsEndpoint(), {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -64,32 +50,23 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
       return getDefaultModels();
     }
 
-    const data = (await response.json()) as ModelsResponse;
+    const data = (await response.json()) as ChatModelsResponse;
 
-    // Filter to only text models that are up and suitable for chat
     const models: Record<string, object> = {};
 
-    for (const model of data.data) {
-      // Only include text models that are currently available
-      if (model.model_type === "text" && model.status.up) {
-        models[model.id] = {
-          // OpenCode model config
-          name: model.name,
-          capabilities: {
-            functionCalling: model.capabilities.function_calling,
-            jsonMode: model.capabilities.json_mode,
-            streaming: model.capabilities.streaming,
-            vision: model.capabilities.vision,
-          },
-        };
-      }
+    for (const model of data.models) {
+      models[model.id] = {
+        // OpenCode model config
+        name: model.id,
+        contextWindow: model.contextWindow,
+      };
     }
 
     // Cache the results
     cachedModels = models;
     cacheTimestamp = Date.now();
 
-    logDebug(`Fetched ${Object.keys(models).length} text models`);
+    logDebug(`Fetched ${Object.keys(models).length} chat models`);
 
     return models;
   } catch (error) {
