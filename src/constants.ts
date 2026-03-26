@@ -29,3 +29,21 @@ export const ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
 // Device flow polling settings
 export const DEVICE_POLL_INTERVAL_MS = 5000;
 export const DEVICE_POLL_MAX_ATTEMPTS = 60; // 5 minutes max wait
+
+// PKCE flow settings
+export const PKCE_CALLBACK_PORT = 8787;
+export const KEYCLOAK_CLIENT_ID = "berget-code";
+
+// Keycloak URL getters (derived from API URL)
+export const getKeycloakUrl = () => {
+  const apiUrl = getApiUrl();
+  if (apiUrl.includes("localhost") || apiUrl.includes("127.0.0.1")) {
+    return "https://keycloak.stage.berget.ai"; // Local dev uses stage Keycloak
+  }
+  if (apiUrl.includes("stage")) {
+    return "https://keycloak.stage.berget.ai";
+  }
+  return "https://keycloak.berget.ai";
+};
+
+export const getKeycloakRealm = () => "berget";

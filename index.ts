@@ -33,3 +33,4 @@ export type {
 // Re-export utilities that might be useful
 export { isOAuthAuth, accessTokenExpired } from "./src/plugin/auth";
 export { initiateDeviceFlow, pollForToken } from "./src/plugin/device-flow";
+export { createPkceAuthorizeMethod } from "./src/plugin/pkce-flow";
