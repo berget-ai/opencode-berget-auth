@@ -103,33 +103,6 @@ export interface Hooks {
 export type Plugin = (input: PluginInput) => Promise<Hooks>;
 
 /**
- * Device authorization response from Berget API
- */
-export interface DeviceAuthResponse {
-  device_code: string;
-  user_code: string;
-  verification_url: string;
-  expires_in: number;
-  interval: number;
-}
-
-/**
- * Device token polling response
- */
-export interface DeviceTokenResponse {
-  token?: string;
-  refresh_token?: string;
-  expires_in?: number;
-  pending?: boolean;
-  error?: string;
-  user?: {
-    id: string;
-    email: string;
-    name?: string;
-  };
-}
-
-/**
  * Token refresh response
  */
 export interface TokenRefreshResponse {

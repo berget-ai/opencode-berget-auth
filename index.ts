@@ -25,11 +25,9 @@ export type {
   OAuthAuthDetails,
   AuthDetails,
   AuthOAuthResult,
-  DeviceAuthResponse,
-  DeviceTokenResponse,
   BergetUser,
 } from "./src/plugin/types";
 
 // Re-export utilities that might be useful
 export { isOAuthAuth, accessTokenExpired } from "./src/plugin/auth";
-export { initiateDeviceFlow, pollForToken } from "./src/plugin/device-flow";
+export { createPkceAuthorizeMethod } from "./src/plugin/pkce-flow";

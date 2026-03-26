@@ -1,8 +1,8 @@
 /**
  * Berget AI Auth Plugin for OpenCode
  *
- * Enables authentication with Berget AI using Keycloak OAuth
- * via the Device Authorization Flow (RFC 8628).
+ * Enables authentication with Berget AI using Keycloak OAuth.
+ * Uses PKCE flow (RFC 7636) for browser-based authentication.
  *
  * Usage:
  * 1. Add to opencode.json: { "plugin": ["opencode-berget-auth@latest"] }
@@ -15,7 +15,7 @@ import type { Auth, Provider, Config } from "@opencode-ai/sdk";
 import { BERGET_PROVIDER_ID, getInferenceUrl } from "./constants";
 import { isOAuthAuth, accessTokenExpired } from "./plugin/auth";
 import { logDebug, logError } from "./plugin/debug";
-import { createDeviceFlowAuthorizeMethod } from "./plugin/device-flow";
+import { createPkceAuthorizeMethod } from "./plugin/pkce-flow";
 import { fetchBergetModels } from "./plugin/models";
 import { refreshAccessTokenDirect } from "./plugin/token";
 import type { PluginInput, Hooks, OAuthAuthDetails } from "./plugin/types";
@@ -25,7 +25,7 @@ import type { PluginInput, Hooks, OAuthAuthDetails } from "./plugin/types";
  *
  * This plugin:
  * 1. Registers "berget" as an auth provider in OpenCode
- * 2. Implements Device Authorization Flow for CLI authentication
+ * 2. Implements PKCE flow for browser-based authentication
  * 3. Provides custom fetch with automatic token refresh
  * 4. Handles token refresh automatically
  */
@@ -135,8 +135,8 @@ export const BergetAuthPlugin = async ({
       methods: [
         {
           type: "oauth" as const,
-          label: "Login with Berget (Device Flow)",
-          authorize: createDeviceFlowAuthorizeMethod(),
+          label: "Login with Berget",
+          authorize: createPkceAuthorizeMethod(),
         },
         {
           type: "api" as const,
