@@ -63,6 +63,7 @@ async function refreshAccessTokenInternal(
       },
       body: JSON.stringify({
         refresh_token: refreshToken,
+        client_id: "berget-code", // Explicit: CLI/OpenCode uses public client
       }),
     });
 
