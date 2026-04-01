@@ -9,7 +9,7 @@
  * // opencode.json
  * {
  *   "$schema": "https://opencode.ai/config.json",
- *   "plugin": ["opencode-berget-auth@latest"]
+ *   "plugin": ["@bergetai/opencode-auth@1.0.10"]
  * }
  * ```
  *
@@ -17,8 +17,18 @@
  * @see https://opencode.ai/docs/plugins
  */
 
-export { BergetAuthPlugin, BergetOAuthPlugin } from "./src/plugin";
-export { BergetAuthPlugin as default } from "./src/plugin";
+import { BergetAuthPlugin, BergetOAuthPlugin } from "./src/plugin";
+
+// OpenCode 1.3.x expects plugins to export { server: Plugin }
+export const BergetPlugin = {
+  server: BergetAuthPlugin,
+};
+
+// Default export for OpenCode plugin loader
+export default BergetPlugin;
+
+// Named exports for backward compatibility and direct usage
+export { BergetAuthPlugin, BergetOAuthPlugin };
 
 // Re-export types for consumers
 export type {
