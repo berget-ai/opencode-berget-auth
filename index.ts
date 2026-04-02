@@ -19,10 +19,11 @@
 
 import { BergetAuthPlugin, BergetOAuthPlugin } from "./src/plugin";
 
-// OpenCode 1.3.x expects PluginModule format: { server: Plugin }
-export default {
-  server: BergetAuthPlugin,
-};
+// Export the plugin function directly as default (OpenCode loads default export)
+export default BergetAuthPlugin;
+
+// Also export as PluginModule format for compatibility
+export const server = BergetAuthPlugin;
 
 // Named exports for backward compatibility
 export { BergetAuthPlugin, BergetOAuthPlugin };
