@@ -1,6 +1,6 @@
 {
   "name": "@bergetai/opencode-auth",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Berget AI auth plugin for OpenCode - authenticate with your Berget account",
   "module": "index.ts",
   "author": "Berget AI",
@@ -15,8 +15,10 @@
     "src"
   ],
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./server": "./index.ts"
   },
+  "main": "index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
