@@ -126,8 +126,8 @@ async function exchangeCodeForTokens(
  * Creates the OAuth authorize method using PKCE flow
  * This is called when user selects "Login with Berget" in OpenCode
  */
-export function createPkceAuthorizeMethod(): () => Promise<AuthorizeResult> {
-  return async (): Promise<AuthorizeResult> => {
+export function createPkceAuthorizeMethod(): (inputs?: Record<string, string>) => Promise<AuthorizeResult> {
+  return async (_inputs?: Record<string, string>): Promise<AuthorizeResult> => {
     const isHeadless = isHeadlessEnvironment();
 
     if (isHeadless) {

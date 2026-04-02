@@ -1,6 +1,6 @@
 {
   "name": "@bergetai/opencode-auth",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Berget AI auth plugin for OpenCode - authenticate with your Berget account",
   "module": "index.ts",
   "author": "Berget AI",
@@ -29,7 +29,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.2.20"
+    "@opencode-ai/plugin": "1.3.13"
   },
   "keywords": [
     "opencode",
