@@ -149,7 +149,7 @@ export function createPkceAuthorizeMethod(): (inputs?: Record<string, string>) =
     authUrl.searchParams.set("client_id", KEYCLOAK_CLIENT_ID);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("scope", "openid email profile");
+    authUrl.searchParams.set("scope", "openid email profile offline_access");
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", "S256");
