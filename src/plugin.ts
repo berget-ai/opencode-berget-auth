@@ -39,32 +39,17 @@ export const BergetAuthPlugin = async ({
     config: async (config: Config) => {
       logDebug("Configuring OpenCode for Berget");
 
-      // Add Berget provider configuration if not present
-      if (!config.provider) {
-        config.provider = {};
-      }
-
       // Always set the API URL and models from env var (allows runtime override)
       // We always fetch models dynamically to override any stale models in the binary
+      config.provider ??= {};
+      config.provider.berget ??= { api: '', options: {}, models: {} };
+
       const inferenceUrl = getInferenceUrl();
-      const models = await fetchBergetModels();
-      
-      if (!config.provider.berget) {
-        config.provider.berget = {
-          api: inferenceUrl,
-          options: { baseURL: inferenceUrl },
-          models,
-        };
-      } else {
-        // Override API URL and models even if provider exists (from binary/cache)
-        config.provider.berget.api = inferenceUrl;
-        config.provider.berget.models = models;
-        if (!config.provider.berget.options) {
-          config.provider.berget.options = {};
-        }
-        config.provider.berget.options.baseURL = inferenceUrl;
-      }
-      logDebug(`Berget provider configured: ${inferenceUrl}, ${Object.keys(models).length} models`);
+      config.provider.berget.api = inferenceUrl;
+      config.provider.berget.options ??= {};
+      config.provider.berget.options.baseURL = inferenceUrl;
+      config.provider.berget.models = await fetchBergetModels();
+      logDebug(`Berget provider configured: ${inferenceUrl}, ${Object.keys(config.provider.berget.models).length} models`);
     },
 
     // Authentication configuration
