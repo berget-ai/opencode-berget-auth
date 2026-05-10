@@ -1,7 +1,7 @@
 /**
  * PKCE Authorization Flow implementation for Berget
  * Based on RFC 7636 - Proof Key for Code Exchange
- * 
+ *
  * This flow is preferred for desktop environments where a local
  * callback server can be started. It works better with magic link
  * authentication than device flow.
@@ -11,7 +11,12 @@ import { spawn } from "node:child_process";
 import * as http from "node:http";
 import * as crypto from "node:crypto";
 import * as url from "node:url";
-import { getKeycloakUrl, getKeycloakRealm, KEYCLOAK_CLIENT_ID, PKCE_CALLBACK_PORT } from "../constants";
+import {
+  getKeycloakUrl,
+  getKeycloakRealm,
+  KEYCLOAK_CLIENT_ID,
+  PKCE_CALLBACK_PORT,
+} from "../constants";
 import { logDebug } from "./debug";
 import type { AuthorizeResult, AuthOAuthResult } from "./types";
 
@@ -35,14 +40,8 @@ function generateCodeChallenge(verifier: string): string {
 function openBrowserUrl(url: string): void {
   try {
     const platform = process.platform;
-    const command =
-      platform === "darwin"
-        ? "open"
-        : platform === "win32"
-          ? "rundll32"
-          : "xdg-open";
-    const args =
-      platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
+    const command = platform === "darwin" ? "open" : platform === "win32" ? "rundll32" : "xdg-open";
+    const args = platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
 
     const child = spawn(command, args, {
       stdio: "ignore",
@@ -78,9 +77,9 @@ async function exchangeCodeForTokens(
   redirectUri: string
 ): Promise<AuthOAuthResult> {
   const tokenUrl = `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/token`;
-  
+
   logDebug(`Exchanging code for tokens at ${tokenUrl}`);
-  
+
   const response = await fetch(tokenUrl, {
     method: "POST",
     headers: {
@@ -126,7 +125,9 @@ async function exchangeCodeForTokens(
  * Creates the OAuth authorize method using PKCE flow
  * This is called when user selects "Login with Berget" in OpenCode
  */
-export function createPkceAuthorizeMethod(): (inputs?: Record<string, string>) => Promise<AuthorizeResult> {
+export function createPkceAuthorizeMethod(): (
+  inputs?: Record<string, string>
+) => Promise<AuthorizeResult> {
   return async (_inputs?: Record<string, string>): Promise<AuthorizeResult> => {
     const isHeadless = isHeadlessEnvironment();
 
@@ -168,7 +169,7 @@ export function createPkceAuthorizeMethod(): (inputs?: Record<string, string>) =
         : `Complete the sign-in flow in your browser. The page should have opened automatically.`,
       method: "auto" as const,
       callback: async (): Promise<AuthOAuthResult> => {
-        return new Promise((resolve) => {
+        return new Promise(resolve => {
           const server = http.createServer(async (req, res) => {
             const parsedUrl = url.parse(req.url || "", true);
 
@@ -204,9 +205,11 @@ export function createPkceAuthorizeMethod(): (inputs?: Record<string, string>) =
                       .icon {
                         width: 80px;
                         height: 80px;
-                        background: ${success 
-                          ? "linear-gradient(135deg, #4ade80 0%, #22c55e 100%)" 
-                          : "linear-gradient(135deg, #f87171 0%, #ef4444 100%)"};
+                        background: ${
+                          success
+                            ? "linear-gradient(135deg, #4ade80 0%, #22c55e 100%)"
+                            : "linear-gradient(135deg, #f87171 0%, #ef4444 100%)"
+                        };
                         border-radius: 50%;
                         display: flex;
                         align-items: center;
@@ -242,9 +245,10 @@ export function createPkceAuthorizeMethod(): (inputs?: Record<string, string>) =
                   <body>
                     <div class="container">
                       <div class="icon">
-                        ${success 
-                          ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"></polyline></svg>`
-                          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
+                        ${
+                          success
+                            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+                            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
                         }
                       </div>
                       <h1>${success ? "Authentication Successful" : "Authentication Failed"}</h1>
@@ -319,13 +323,16 @@ export function createPkceAuthorizeMethod(): (inputs?: Record<string, string>) =
           });
 
           // Timeout after 5 minutes
-          setTimeout(() => {
-            server.close();
-            resolve({
-              type: "failed",
-              error: "Authentication timed out. Please try again.",
-            });
-          }, 5 * 60 * 1000);
+          setTimeout(
+            () => {
+              server.close();
+              resolve({
+                type: "failed",
+                error: "Authentication timed out. Please try again.",
+              });
+            },
+            5 * 60 * 1000
+          );
         });
       },
     };

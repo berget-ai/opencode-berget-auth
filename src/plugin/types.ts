@@ -3,12 +3,7 @@
  * Based on @opencode-ai/plugin types
  */
 
-import type {
-  Config,
-  Auth,
-  Provider,
-  createOpencodeClient,
-} from "@opencode-ai/sdk";
+import type { Config, Auth, Provider, createOpencodeClient } from "@opencode-ai/sdk";
 import type { ToolDefinition } from "@opencode-ai/plugin";
 
 /**
@@ -51,9 +46,7 @@ export interface AuthorizeResult {
   url: string;
   instructions: string;
   method: "auto" | "code";
-  callback:
-    | (() => Promise<AuthOAuthResult>)
-    | ((code: string) => Promise<AuthOAuthResult>);
+  callback: (() => Promise<AuthOAuthResult>) | ((code: string) => Promise<AuthOAuthResult>);
 }
 
 /**
@@ -81,10 +74,7 @@ export type AuthMethod = OAuthAuthMethod | ApiAuthMethod;
  */
 export interface AuthHook {
   provider: string;
-  loader?: (
-    auth: () => Promise<Auth>,
-    provider: Provider
-  ) => Promise<Record<string, unknown>>;
+  loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, unknown>>;
   methods: AuthMethod[];
 }
 

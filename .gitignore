@@ -7,6 +7,9 @@ dist/
 *.d.ts
 *.js.map
 
+# Do not ignore root-level ESLint config
+!eslint.config.js
+
 # Bun
 bun.lockb
 
@@ -28,3 +31,6 @@ Thumbs.db
 # Debug logs
 *.log
 npm-debug.log*
+
+# Husky
+.husky/_
