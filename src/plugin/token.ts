@@ -3,7 +3,6 @@
  */
 
 import { getTokenRefreshEndpoint } from "../constants";
-import { clearCachedAuth, storeCachedAuth } from "./cache";
 import { logDebug } from "./debug";
 import type { OAuthAuthDetails, TokenRefreshResponse } from "./types";
 
@@ -81,9 +80,6 @@ async function refreshAccessTokenInternal(
           console.warn(
             "[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate."
           );
-
-          // Clear cached auth
-          clearCachedAuth(refreshToken);
         }
 
         return undefined;
@@ -104,10 +100,6 @@ async function refreshAccessTokenInternal(
       expires: Date.now() + data.expires_in * 1000,
       refresh: data.refresh_token || refreshToken, // Use new refresh token if rotated
     };
-
-    // Update cache
-    clearCachedAuth(refreshToken);
-    storeCachedAuth(updatedAuth);
 
     return updatedAuth;
   } catch (error) {
