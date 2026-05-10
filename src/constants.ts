@@ -9,11 +9,9 @@
 export const BERGET_PROVIDER_ID = "berget";
 
 // Runtime getters for URL configuration
-export const getApiUrl = () =>
-  process.env.BERGET_API_URL || "https://api.berget.ai";
+export const getApiUrl = () => process.env.BERGET_API_URL || "https://api.berget.ai";
 
-export const getInferenceUrl = () =>
-  process.env.BERGET_INFERENCE_URL || "https://api.berget.ai/v1";
+export const getInferenceUrl = () => process.env.BERGET_INFERENCE_URL || "https://api.berget.ai/v1";
 
 // Auth endpoints (token refresh goes through API)
 export const getTokenRefreshEndpoint = () => `${getApiUrl()}/v1/auth/refresh`;

@@ -29,9 +29,7 @@ import type { PluginInput, Hooks, OAuthAuthDetails } from "./plugin/types";
  * 3. Provides custom fetch with automatic token refresh
  * 4. Handles token refresh automatically
  */
-export const BergetAuthPlugin = async ({
-  client,
-}: PluginInput): Promise<Hooks> => {
+export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promise<Hooks> => {
   logDebug("Initializing Berget Auth Plugin");
 
   return {
@@ -42,14 +40,16 @@ export const BergetAuthPlugin = async ({
       // Always set the API URL and models from env var (allows runtime override)
       // We always fetch models dynamically to override any stale models in the binary
       config.provider ??= {};
-      config.provider.berget ??= { api: '', options: {}, models: {} };
+      config.provider.berget ??= { api: "", options: {}, models: {} };
 
       const inferenceUrl = getInferenceUrl();
       config.provider.berget.api = inferenceUrl;
       config.provider.berget.options ??= {};
       config.provider.berget.options.baseURL = inferenceUrl;
       config.provider.berget.models = await fetchBergetModels();
-      logDebug(`Berget provider configured: ${inferenceUrl}, ${Object.keys(config.provider.berget.models).length} models`);
+      logDebug(
+        `Berget provider configured: ${inferenceUrl}, ${Object.keys(config.provider.berget.models).length} models`
+      );
     },
 
     // Authentication configuration

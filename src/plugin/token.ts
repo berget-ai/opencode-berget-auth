@@ -7,10 +7,7 @@ import { logDebug } from "./debug";
 import type { OAuthAuthDetails, TokenRefreshResponse } from "./types";
 
 // Track in-flight refresh requests to prevent duplicates
-const refreshInFlight = new Map<
-  string,
-  Promise<OAuthAuthDetails | undefined>
->();
+const refreshInFlight = new Map<string, Promise<OAuthAuthDetails | undefined>>();
 
 /**
  * Refreshes an expired access token using the refresh token
@@ -73,10 +70,7 @@ async function refreshAccessTokenInternal(
       if (response.status === 401 || response.status === 400) {
         const errorData = parseErrorResponse(errorText);
 
-        if (
-          errorData?.error === "invalid_grant" ||
-          errorData?.error === "invalid_token"
-        ) {
+        if (errorData?.error === "invalid_grant" || errorData?.error === "invalid_token") {
           console.warn(
             "[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate."
           );
