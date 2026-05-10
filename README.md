@@ -33,7 +33,7 @@ For API key users:
 
 ## How It Works
 
-- **PKCE Authorization Flow** for SSO login (works in SSH/headless too)
+- **PKCE Authorization Flow** for SSO login
 - **Automatic token refresh** via custom fetch — sessions stay alive indefinitely
 - **Models fetched dynamically** from Berget API — no manual config needed
 
