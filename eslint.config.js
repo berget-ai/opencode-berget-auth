@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import perfectionist from 'eslint-plugin-perfectionist';
 import prettier from 'eslint-plugin-prettier';
 import promise from 'eslint-plugin-promise';
+import sonarjs from 'eslint-plugin-sonarjs';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -21,6 +22,7 @@ export default tseslint.config(
   ...tseslint.configs.strict,
   perfectionist.configs['recommended-natural'],
   promise.configs['flat/recommended'],
+  sonarjs.configs.recommended,
   {
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {

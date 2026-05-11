@@ -66,171 +66,7 @@ export function createPkceAuthorizeMethod(): (
 
     return {
       callback: async (): Promise<AuthOAuthResult> => {
-        return new Promise((resolve) => {
-          const server = http.createServer(async (req, res) => {
-            const parsedUrl = url.parse(req.url || '', true);
-
-            if (parsedUrl.pathname === '/callback') {
-              const receivedState = parsedUrl.query.state as string;
-              const code = parsedUrl.query.code as string;
-              const error = parsedUrl.query.error as string;
-
-              // Send response to browser
-              const htmlResponse = (success: boolean, message: string): string => `
-                <!DOCTYPE html>
-                <html lang="en">
-                  <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Berget - ${success ? 'Authentication Successful' : 'Authentication Failed'}</title>
-                    <style>
-                      * { margin: 0; padding: 0; box-sizing: border-box; }
-                      body {
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        min-height: 100vh;
-                        background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
-                        color: #fff;
-                      }
-                      .container {
-                        text-align: center;
-                        padding: 3rem;
-                        max-width: 400px;
-                      }
-                      .icon {
-                        width: 80px;
-                        height: 80px;
-                        background: ${
-                          success
-                            ? 'linear-gradient(135deg, #4ade80 0%, #22c55e 100%)'
-                            : 'linear-gradient(135deg, #f87171 0%, #ef4444 100%)'
-                        };
-                        border-radius: 50%;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        margin: 0 auto 1.5rem;
-                        box-shadow: 0 4px 20px ${success ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)'};
-                      }
-                      .icon svg {
-                        width: 40px;
-                        height: 40px;
-                        stroke: #fff;
-                        stroke-width: 3;
-                      }
-                      h1 {
-                        font-size: 1.5rem;
-                        font-weight: 600;
-                        margin-bottom: 0.75rem;
-                        color: #fff;
-                      }
-                      p {
-                        color: #94a3b8;
-                        font-size: 0.95rem;
-                        line-height: 1.5;
-                      }
-                      .brand {
-                        margin-top: 2rem;
-                        opacity: 0.5;
-                        font-size: 0.8rem;
-                        letter-spacing: 0.05em;
-                      }
-                    </style>
-                  </head>
-                  <body>
-                    <div class="container">
-                      <div class="icon">
-                        ${
-                          success
-                            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"></polyline></svg>`
-                            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
-                        }
-                      </div>
-                      <h1>${success ? 'Authentication Successful' : 'Authentication Failed'}</h1>
-                      <p>${message}</p>
-                      <div class="brand">BERGET</div>
-                    </div>
-                  </body>
-                </html>
-              `;
-
-              if (error) {
-                res.writeHead(200, { 'Content-Type': 'text/html' });
-                res.end(htmlResponse(false, error));
-                server.close();
-                resolve({
-                  error: `Authentication failed: ${error}`,
-                  type: 'failed',
-                });
-                return;
-              }
-
-              if (receivedState !== state) {
-                res.writeHead(200, { 'Content-Type': 'text/html' });
-                res.end(htmlResponse(false, 'Invalid state parameter'));
-                server.close();
-                resolve({
-                  error: 'Invalid state parameter. Please try again.',
-                  type: 'failed',
-                });
-                return;
-              }
-
-              if (!code) {
-                res.writeHead(200, { 'Content-Type': 'text/html' });
-                res.end(htmlResponse(false, 'No authorization code received'));
-                server.close();
-                resolve({
-                  error: 'No authorization code received.',
-                  type: 'failed',
-                });
-                return;
-              }
-
-              // Exchange code for tokens
-              res.writeHead(200, { 'Content-Type': 'text/html' });
-              res.end(htmlResponse(true, 'You can close this window and return to OpenCode.'));
-              server.close();
-
-              const result = await exchangeCodeForTokens(code, codeVerifier, redirectUri);
-              resolve(result);
-            }
-          });
-
-          server.on('error', (err: NodeJS.ErrnoException) => {
-            if (err.code === 'EADDRINUSE') {
-              logDebug(`Port ${PKCE_CALLBACK_PORT} is already in use`);
-              resolve({
-                error: `Port ${PKCE_CALLBACK_PORT} is already in use. Please close other applications using this port.`,
-                type: 'failed',
-              });
-            } else {
-              logDebug(`Server error: ${err.message}`);
-              resolve({
-                error: `Failed to start callback server: ${err.message}`,
-                type: 'failed',
-              });
-            }
-          });
-
-          server.listen(PKCE_CALLBACK_PORT, () => {
-            logDebug(`Callback server listening on port ${PKCE_CALLBACK_PORT}`);
-          });
-
-          // Timeout after 5 minutes
-          setTimeout(
-            () => {
-              server.close();
-              resolve({
-                error: 'Authentication timed out. Please try again.',
-                type: 'failed',
-              });
-            },
-            5 * 60 * 1000,
-          );
-        });
+        return createCallbackServerPromise(state, codeVerifier, redirectUri);
       },
       instructions: isHeadless
         ? `Open the URL above in your browser to sign in.\n\nNote: PKCE flow requires a browser on this machine.`
@@ -239,6 +75,137 @@ export function createPkceAuthorizeMethod(): (
       url: authUrl.toString(),
     };
   };
+}
+
+/**
+ * Builds the HTML response for the callback page
+ */
+function buildHtmlResponse(success: boolean, message: string): string {
+  const gradient = success
+    ? 'linear-gradient(135deg, #4ade80 0%, #22c55e 100%)'
+    : 'linear-gradient(135deg, #f87171 0%, #ef4444 100%)';
+  const shadow = success ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)';
+  const icon = success
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+  const title = success ? 'Authentication Successful' : 'Authentication Failed';
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Berget - ${title}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+            color: #fff;
+          }
+          .container {
+            text-align: center;
+            padding: 3rem;
+            max-width: 400px;
+          }
+          .icon {
+            width: 80px;
+            height: 80px;
+            background: ${gradient};
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            box-shadow: 0 4px 20px ${shadow};
+          }
+          .icon svg {
+            width: 40px;
+            height: 40px;
+            stroke: #fff;
+            stroke-width: 3;
+          }
+          h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: #fff;
+          }
+          p {
+            color: #94a3b8;
+            font-size: 0.95rem;
+            line-height: 1.5;
+          }
+          .brand {
+            margin-top: 2rem;
+            opacity: 0.5;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="icon">${icon}</div>
+          <h1>${title}</h1>
+          <p>${message}</p>
+          <div class="brand">BERGET</div>
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+/**
+ * Creates a local HTTP server to receive the OAuth callback
+ */
+function createCallbackServerPromise(
+  state: string,
+  codeVerifier: string,
+  redirectUri: string,
+): Promise<AuthOAuthResult> {
+  return new Promise((resolve) => {
+    const server = http.createServer(async (req, res) => {
+      const parsedUrl = url.parse(req.url || '', true);
+
+      if (parsedUrl.pathname !== '/callback') return;
+
+      await handleCallbackRequest(
+        res,
+        server,
+        parsedUrl,
+        state,
+        codeVerifier,
+        redirectUri,
+        resolve,
+      );
+    });
+
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      handleServerError(err, resolve);
+    });
+
+    server.listen(PKCE_CALLBACK_PORT, () => {
+      logDebug(`Callback server listening on port ${PKCE_CALLBACK_PORT}`);
+    });
+
+    // Timeout after 5 minutes
+    setTimeout(
+      () => {
+        server.close();
+        resolve({
+          error: 'Authentication timed out. Please try again.',
+          type: 'failed',
+        });
+      },
+      5 * 60 * 1000,
+    );
+  });
 }
 
 /**
@@ -309,6 +276,87 @@ function generateCodeVerifier(): string {
 }
 
 /**
+ * Handles the OAuth callback request
+ */
+async function handleCallbackRequest(
+  res: http.ServerResponse,
+  server: http.Server,
+  parsedUrl: url.UrlWithParsedQuery,
+  state: string,
+  codeVerifier: string,
+  redirectUri: string,
+  resolve: (value: AuthOAuthResult | PromiseLike<AuthOAuthResult>) => void,
+): Promise<void> {
+  const receivedState = parsedUrl.query.state as string;
+  const code = parsedUrl.query.code as string;
+  const error = parsedUrl.query.error as string;
+
+  if (error) {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(buildHtmlResponse(false, error));
+    server.close();
+    resolve({
+      error: `Authentication failed: ${error}`,
+      type: 'failed',
+    });
+    return;
+  }
+
+  if (receivedState !== state) {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(buildHtmlResponse(false, 'Invalid state parameter'));
+    server.close();
+    resolve({
+      error: 'Invalid state parameter. Please try again.',
+      type: 'failed',
+    });
+    return;
+  }
+
+  if (!code) {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(buildHtmlResponse(false, 'No authorization code received'));
+    server.close();
+    resolve({
+      error: 'No authorization code received.',
+      type: 'failed',
+    });
+    return;
+  }
+
+  // Exchange code for tokens
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end(buildHtmlResponse(true, 'You can close this window and return to OpenCode.'));
+  server.close();
+
+  const result = await exchangeCodeForTokens(code, codeVerifier, redirectUri);
+  resolve(result);
+}
+
+/**
+ * Handles server startup errors
+ */
+function handleServerError(
+  err: NodeJS.ErrnoException,
+  resolve: (value: AuthOAuthResult | PromiseLike<AuthOAuthResult>) => void,
+): void {
+  if (err.code === 'EADDRINUSE') {
+    logDebug(`Port ${PKCE_CALLBACK_PORT} is already in use`);
+    resolve({
+      error: `Port ${PKCE_CALLBACK_PORT} is already in use. Please close other applications using this port.`,
+      type: 'failed',
+    });
+    return;
+  }
+
+  logDebug(`Server error: ${err.message}`);
+  resolve({
+    error: `Failed to start callback server: ${err.message}`,
+    type: 'failed',
+  });
+}
+
+/**
  * Checks if running in a headless environment
  */
 function isHeadlessEnvironment(): boolean {
@@ -324,11 +372,22 @@ function isHeadlessEnvironment(): boolean {
 /**
  * Opens a URL in the user's default browser
  */
-function openBrowserUrl(url: string): void {
+function openBrowserUrl(urlStr: string): void {
   try {
     const platform = process.platform;
-    const command = platform === 'darwin' ? 'open' : platform === 'win32' ? 'rundll32' : 'xdg-open';
-    const args = platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
+    let command: string;
+    let args: string[];
+
+    if (platform === 'darwin') {
+      command = 'open';
+      args = [urlStr];
+    } else if (platform === 'win32') {
+      command = 'rundll32';
+      args = ['url.dll,FileProtocolHandler', urlStr];
+    } else {
+      command = 'xdg-open';
+      args = [urlStr];
+    }
 
     const child = spawn(command, args, {
       detached: true,
