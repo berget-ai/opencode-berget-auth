@@ -30,51 +30,7 @@ import { logDebug } from './debug';
 export function createPkceAuthorizeMethod(): (
   inputs?: Record<string, string>,
 ) => Promise<AuthorizeResult> {
-  return async (_inputs?: Record<string, string>): Promise<AuthorizeResult> => {
-    const isHeadless = isHeadlessEnvironment();
-
-    if (isHeadless) {
-      logDebug('Headless environment detected - PKCE flow may not work');
-      // In headless mode, we could fall back to device flow
-      // For now, we'll still try PKCE but warn the user
-    }
-
-    // Generate PKCE parameters
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = generateCodeChallenge(codeVerifier);
-    const state = crypto.randomBytes(16).toString('hex');
-    const redirectUri = `http://localhost:${PKCE_CALLBACK_PORT}/callback`;
-
-    // Build authorization URL
-    const authUrl = new URL(
-      `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/auth`,
-    );
-    authUrl.searchParams.set('client_id', KEYCLOAK_CLIENT_ID);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('redirect_uri', redirectUri);
-    authUrl.searchParams.set('scope', 'openid email profile offline_access');
-    authUrl.searchParams.set('state', state);
-    authUrl.searchParams.set('code_challenge', codeChallenge);
-    authUrl.searchParams.set('code_challenge_method', 'S256');
-
-    logDebug(`Authorization URL: ${authUrl.toString()}`);
-
-    // Open browser
-    if (!isHeadless) {
-      openBrowserUrl(authUrl.toString());
-    }
-
-    return {
-      callback: async (): Promise<AuthOAuthResult> => {
-        return createCallbackServerPromise(state, codeVerifier, redirectUri);
-      },
-      instructions: isHeadless
-        ? `Open the URL above in your browser to sign in.\n\nNote: PKCE flow requires a browser on this machine.`
-        : `Complete the sign-in flow in your browser. The page should have opened automatically.`,
-      method: 'auto' as const,
-      url: authUrl.toString(),
-    };
-  };
+  return executePkceAuthorization;
 }
 
 /**
@@ -170,13 +126,13 @@ function createCallbackServerPromise(
   redirectUri: string,
 ): Promise<AuthOAuthResult> {
   return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      const parsedUrl = url.parse(req.url || '', true);
+    const server = http.createServer(async (request, response) => {
+      const parsedUrl = url.parse(request.url || '', true);
 
       if (parsedUrl.pathname !== '/callback') return;
 
       await handleCallbackRequest(
-        res,
+        response,
         server,
         parsedUrl,
         state,
@@ -186,8 +142,8 @@ function createCallbackServerPromise(
       );
     });
 
-    server.on('error', (err: NodeJS.ErrnoException) => {
-      handleServerError(err, resolve);
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      handleServerError(error, resolve);
     });
 
     server.listen(PKCE_CALLBACK_PORT, () => {
@@ -261,6 +217,54 @@ async function exchangeCodeForTokens(
   };
 }
 
+async function executePkceAuthorization(
+  _inputs?: Record<string, string>,
+): Promise<AuthorizeResult> {
+  const isHeadless = isHeadlessEnvironment();
+
+  if (isHeadless) {
+    logDebug('Headless environment detected - PKCE flow may not work');
+    // In headless mode, we could fall back to device flow
+    // For now, we'll still try PKCE but warn the user
+  }
+
+  // Generate PKCE parameters
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = generateCodeChallenge(codeVerifier);
+  const state = crypto.randomBytes(16).toString('hex');
+  const redirectUri = `http://localhost:${PKCE_CALLBACK_PORT}/callback`;
+
+  // Build authorization URL
+  const authUrl = new URL(
+    `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/auth`,
+  );
+  authUrl.searchParams.set('client_id', KEYCLOAK_CLIENT_ID);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('scope', 'openid email profile offline_access');
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('code_challenge', codeChallenge);
+  authUrl.searchParams.set('code_challenge_method', 'S256');
+
+  logDebug(`Authorization URL: ${authUrl.toString()}`);
+
+  // Open browser
+  if (!isHeadless) {
+    openBrowserUrl(authUrl.toString());
+  }
+
+  return {
+    callback: async (): Promise<AuthOAuthResult> => {
+      return createCallbackServerPromise(state, codeVerifier, redirectUri);
+    },
+    instructions: isHeadless
+      ? `Open the URL above in your browser to sign in.\n\nNote: PKCE flow requires a browser on this machine.`
+      : `Complete the sign-in flow in your browser. The page should have opened automatically.`,
+    method: 'auto' as const,
+    url: authUrl.toString(),
+  };
+}
+
 /**
  * Generate code_challenge from code_verifier using S256 method
  */
@@ -279,7 +283,7 @@ function generateCodeVerifier(): string {
  * Handles the OAuth callback request
  */
 async function handleCallbackRequest(
-  res: http.ServerResponse,
+  response: http.ServerResponse,
   server: http.Server,
   parsedUrl: url.UrlWithParsedQuery,
   state: string,
@@ -292,8 +296,8 @@ async function handleCallbackRequest(
   const error = parsedUrl.query.error as string;
 
   if (error) {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(buildHtmlResponse(false, error));
+    response.writeHead(200, { 'Content-Type': 'text/html' });
+    response.end(buildHtmlResponse(false, error));
     server.close();
     resolve({
       error: `Authentication failed: ${error}`,
@@ -303,8 +307,8 @@ async function handleCallbackRequest(
   }
 
   if (receivedState !== state) {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(buildHtmlResponse(false, 'Invalid state parameter'));
+    response.writeHead(200, { 'Content-Type': 'text/html' });
+    response.end(buildHtmlResponse(false, 'Invalid state parameter'));
     server.close();
     resolve({
       error: 'Invalid state parameter. Please try again.',
@@ -314,8 +318,8 @@ async function handleCallbackRequest(
   }
 
   if (!code) {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(buildHtmlResponse(false, 'No authorization code received'));
+    response.writeHead(200, { 'Content-Type': 'text/html' });
+    response.end(buildHtmlResponse(false, 'No authorization code received'));
     server.close();
     resolve({
       error: 'No authorization code received.',
@@ -325,8 +329,8 @@ async function handleCallbackRequest(
   }
 
   // Exchange code for tokens
-  res.writeHead(200, { 'Content-Type': 'text/html' });
-  res.end(buildHtmlResponse(true, 'You can close this window and return to OpenCode.'));
+  response.writeHead(200, { 'Content-Type': 'text/html' });
+  response.end(buildHtmlResponse(true, 'You can close this window and return to OpenCode.'));
   server.close();
 
   const result = await exchangeCodeForTokens(code, codeVerifier, redirectUri);
@@ -337,10 +341,10 @@ async function handleCallbackRequest(
  * Handles server startup errors
  */
 function handleServerError(
-  err: NodeJS.ErrnoException,
+  error: NodeJS.ErrnoException,
   resolve: (value: AuthOAuthResult | PromiseLike<AuthOAuthResult>) => void,
 ): void {
-  if (err.code === 'EADDRINUSE') {
+  if (error.code === 'EADDRINUSE') {
     logDebug(`Port ${PKCE_CALLBACK_PORT} is already in use`);
     resolve({
       error: `Port ${PKCE_CALLBACK_PORT} is already in use. Please close other applications using this port.`,
@@ -349,9 +353,9 @@ function handleServerError(
     return;
   }
 
-  logDebug(`Server error: ${err.message}`);
+  logDebug(`Server error: ${error.message}`);
   resolve({
-    error: `Failed to start callback server: ${err.message}`,
+    error: `Failed to start callback server: ${error.message}`,
     type: 'failed',
   });
 }
@@ -372,24 +376,24 @@ function isHeadlessEnvironment(): boolean {
 /**
  * Opens a URL in the user's default browser
  */
-function openBrowserUrl(urlStr: string): void {
+function openBrowserUrl(urlString: string): void {
   try {
     const platform = process.platform;
     let command: string;
-    let args: string[];
+    let arguments_: string[];
 
     if (platform === 'darwin') {
       command = 'open';
-      args = [urlStr];
+      arguments_ = [urlString];
     } else if (platform === 'win32') {
       command = 'rundll32';
-      args = ['url.dll,FileProtocolHandler', urlStr];
+      arguments_ = ['url.dll,FileProtocolHandler', urlString];
     } else {
       command = 'xdg-open';
-      args = [urlStr];
+      arguments_ = [urlString];
     }
 
-    const child = spawn(command, args, {
+    const child = spawn(command, arguments_, {
       detached: true,
       stdio: 'ignore',
     });

@@ -20,15 +20,15 @@ interface ChatModelsResponse {
 }
 
 // Cache for models to avoid repeated API calls
-let cachedModels: null | Record<string, object> = null;
-let cacheTimestamp: number = 0;
+let cachedModels: Record<string, object> | undefined;
+let cacheTimestamp = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Clears the model cache (useful for testing or forcing refresh)
  */
 export function clearModelCache(): void {
-  cachedModels = null;
+  cachedModels = undefined;
   cacheTimestamp = 0;
 }
 

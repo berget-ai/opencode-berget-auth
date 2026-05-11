@@ -17,16 +17,14 @@
  * @see https://opencode.ai/docs/plugins
  */
 
-import { BergetAuthPlugin, BergetOAuthPlugin } from './src/plugin';
-
 // Export the plugin function directly as default (OpenCode loads default export)
-export default BergetAuthPlugin;
+export { BergetAuthPlugin as default } from './src/plugin';
 
 // Also export as PluginModule format for compatibility
-export const server = BergetAuthPlugin;
+export { BergetAuthPlugin as server } from './src/plugin';
 
 // Named exports for backward compatibility
-export { BergetAuthPlugin, BergetOAuthPlugin };
+export { BergetAuthPlugin, BergetOAuthPlugin } from './src/plugin';
 
 // Re-export utilities that might be useful
 export { accessTokenExpired, isOAuthAuth } from './src/plugin/auth';
