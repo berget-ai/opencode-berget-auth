@@ -3,110 +3,69 @@
  * Based on @opencode-ai/plugin types
  */
 
-import type { Config, Auth, Provider, createOpencodeClient } from "@opencode-ai/sdk";
 import type { ToolDefinition } from "@opencode-ai/plugin";
+import type { Auth, Config, createOpencodeClient, Provider } from "@opencode-ai/sdk";
 
 /**
- * Plugin input from OpenCode
+ * Auth hook method - API key type
  */
-export interface PluginInput {
-  client: ReturnType<typeof createOpencodeClient>;
-  project: { id: string; path: string };
-  directory: string;
-  worktree: string;
-  serverUrl: URL;
+export interface ApiAuthMethod {
+  authorize?(): Promise<{ key: string; type: "success" } | { type: "failed" }>;
+  label: string;
+  type: "api";
 }
+
+export type AuthDetails = NonOAuthAuthDetails | OAuthAuthDetails;
+
+/**
+ * Auth hook for plugin
+ */
+export interface AuthHook {
+  loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, unknown>>;
+  methods: AuthMethod[];
+  provider: string;
+}
+
+export type AuthMethod = ApiAuthMethod | OAuthAuthMethod;
 
 /**
  * OAuth authentication result
  */
 export type AuthOAuthResult =
   | {
-      type: "success";
+      access: string;
+      accountId?: string;
+      expires: number;
       provider?: string;
       refresh: string;
-      access: string;
-      expires: number;
-      accountId?: string;
-    }
-  | {
       type: "success";
-      provider?: string;
-      key: string;
     }
   | {
-      type: "failed";
       error?: string;
+      type: "failed";
+    }
+  | {
+      key: string;
+      provider?: string;
+      type: "success";
     };
 
 /**
  * OAuth authorize callback result
  */
 export interface AuthorizeResult {
-  url: string;
+  callback: (() => Promise<AuthOAuthResult>) | ((code: string) => Promise<AuthOAuthResult>);
   instructions: string;
   method: "auto" | "code";
-  callback: (() => Promise<AuthOAuthResult>) | ((code: string) => Promise<AuthOAuthResult>);
-}
-
-/**
- * Auth hook method - OAuth type
- */
-export interface OAuthAuthMethod {
-  type: "oauth";
-  label: string;
-  authorize(): Promise<AuthorizeResult>;
-}
-
-/**
- * Auth hook method - API key type
- */
-export interface ApiAuthMethod {
-  type: "api";
-  label: string;
-  authorize?(): Promise<{ type: "success"; key: string } | { type: "failed" }>;
-}
-
-export type AuthMethod = OAuthAuthMethod | ApiAuthMethod;
-
-/**
- * Auth hook for plugin
- */
-export interface AuthHook {
-  provider: string;
-  loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, unknown>>;
-  methods: AuthMethod[];
-}
-
-/**
- * Plugin hooks result
- */
-export interface Hooks {
-  config?: (input: Config) => Promise<void>;
-  tool?: Record<string, ToolDefinition>;
-  auth?: AuthHook;
-}
-
-/**
- * Plugin function type
- */
-export type Plugin = (input: PluginInput) => Promise<Hooks>;
-
-/**
- * Token refresh response
- */
-export interface TokenRefreshResponse {
-  token: string;
-  refresh_token?: string;
-  expires_in: number;
+  url: string;
 }
 
 /**
  * Berget user info
  */
 export interface BergetUser {
-  id: string;
   email: string;
+  id: string;
   name?: string;
   organizations?: Array<{
     id: string;
@@ -116,21 +75,62 @@ export interface BergetUser {
 }
 
 /**
- * OAuth auth details from OpenCode storage
+ * Plugin hooks result
  */
-export interface OAuthAuthDetails {
-  type: "oauth";
-  refresh: string;
-  access?: string;
-  expires?: number;
+export interface Hooks {
+  auth?: AuthHook;
+  config?: (input: Config) => Promise<void>;
+  tool?: Record<string, ToolDefinition>;
 }
 
 /**
  * Non-OAuth auth details
  */
 export interface NonOAuthAuthDetails {
-  type: string;
   [key: string]: unknown;
+  type: string;
 }
 
-export type AuthDetails = OAuthAuthDetails | NonOAuthAuthDetails;
+/**
+ * OAuth auth details from OpenCode storage
+ */
+export interface OAuthAuthDetails {
+  access?: string;
+  expires?: number;
+  refresh: string;
+  type: "oauth";
+}
+
+/**
+ * Auth hook method - OAuth type
+ */
+export interface OAuthAuthMethod {
+  authorize(): Promise<AuthorizeResult>;
+  label: string;
+  type: "oauth";
+}
+
+/**
+ * Plugin function type
+ */
+export type Plugin = (input: PluginInput) => Promise<Hooks>;
+
+/**
+ * Plugin input from OpenCode
+ */
+export interface PluginInput {
+  client: ReturnType<typeof createOpencodeClient>;
+  directory: string;
+  project: { id: string; path: string };
+  serverUrl: URL;
+  worktree: string;
+}
+
+/**
+ * Token refresh response
+ */
+export interface TokenRefreshResponse {
+  expires_in: number;
+  refresh_token?: string;
+  token: string;
+}

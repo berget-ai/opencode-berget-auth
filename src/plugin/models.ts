@@ -7,12 +7,12 @@ import { logDebug, logError } from "./debug";
 
 // Response from /v1/models/chat endpoint
 interface ChatModel {
-  id: string;
-  contextWindow: number;
-  inputPricePerToken: number;
-  outputPricePerToken: number;
   aliases?: string[];
+  contextWindow: number;
+  id: string;
+  inputPricePerToken: number;
   lifecycleState?: string;
+  outputPricePerToken: number;
 }
 
 interface ChatModelsResponse {
@@ -20,9 +20,17 @@ interface ChatModelsResponse {
 }
 
 // Cache for models to avoid repeated API calls
-let cachedModels: Record<string, object> | null = null;
+let cachedModels: null | Record<string, object> = null;
 let cacheTimestamp: number = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Clears the model cache (useful for testing or forcing refresh)
+ */
+export function clearModelCache(): void {
+  cachedModels = null;
+  cacheTimestamp = 0;
+}
 
 /**
  * Fetches available chat models from Berget API
@@ -39,10 +47,10 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
 
   try {
     const response = await fetch(getModelsEndpoint(), {
-      method: "GET",
       headers: {
         "Content-Type": "application/json",
       },
+      method: "GET",
     });
 
     if (!response.ok) {
@@ -56,9 +64,9 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
 
     for (const model of data.models) {
       models[model.id] = {
+        contextWindow: model.contextWindow,
         // OpenCode model config
         name: model.id,
-        contextWindow: model.contextWindow,
       };
     }
 
@@ -80,17 +88,9 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
  */
 function getDefaultModels(): Record<string, object> {
   return {
-    "meta-llama/Llama-3.3-70B-Instruct": {},
     "meta-llama/Llama-3.1-8B-Instruct": {},
+    "meta-llama/Llama-3.3-70B-Instruct": {},
     "mistralai/Mistral-Small-3.2-24B-Instruct-2506": {},
     "openai/gpt-oss-120b": {},
   };
-}
-
-/**
- * Clears the model cache (useful for testing or forcing refresh)
- */
-export function clearModelCache(): void {
-  cachedModels = null;
-  cacheTimestamp = 0;
 }

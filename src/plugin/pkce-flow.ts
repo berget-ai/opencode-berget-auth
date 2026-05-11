@@ -8,119 +8,20 @@
  */
 
 import { spawn } from "node:child_process";
-import * as http from "node:http";
 import * as crypto from "node:crypto";
+import * as http from "node:http";
 import * as url from "node:url";
+
+import type { AuthOAuthResult, AuthorizeResult } from "./types";
+
 import {
-  getKeycloakUrl,
+  ACCESS_TOKEN_EXPIRY_BUFFER_MS,
   getKeycloakRealm,
+  getKeycloakUrl,
   KEYCLOAK_CLIENT_ID,
   PKCE_CALLBACK_PORT,
-  ACCESS_TOKEN_EXPIRY_BUFFER_MS,
 } from "../constants";
 import { logDebug } from "./debug";
-import type { AuthorizeResult, AuthOAuthResult } from "./types";
-
-/**
- * Generate a random string for PKCE code_verifier
- */
-function generateCodeVerifier(): string {
-  return crypto.randomBytes(32).toString("base64url");
-}
-
-/**
- * Generate code_challenge from code_verifier using S256 method
- */
-function generateCodeChallenge(verifier: string): string {
-  return crypto.createHash("sha256").update(verifier).digest("base64url");
-}
-
-/**
- * Opens a URL in the user's default browser
- */
-function openBrowserUrl(url: string): void {
-  try {
-    const platform = process.platform;
-    const command = platform === "darwin" ? "open" : platform === "win32" ? "rundll32" : "xdg-open";
-    const args = platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
-
-    const child = spawn(command, args, {
-      stdio: "ignore",
-      detached: true,
-    });
-    child.unref?.();
-
-    logDebug(`Opened browser with command: ${command}`);
-  } catch (error) {
-    logDebug(`Failed to open browser: ${error}`);
-  }
-}
-
-/**
- * Checks if running in a headless environment
- */
-function isHeadlessEnvironment(): boolean {
-  return !!(
-    process.env.SSH_CONNECTION ||
-    process.env.SSH_CLIENT ||
-    process.env.SSH_TTY ||
-    process.env.OPENCODE_HEADLESS ||
-    process.env.CI
-  );
-}
-
-/**
- * Exchanges authorization code for tokens
- */
-async function exchangeCodeForTokens(
-  code: string,
-  codeVerifier: string,
-  redirectUri: string
-): Promise<AuthOAuthResult> {
-  const tokenUrl = `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/token`;
-
-  logDebug(`Exchanging code for tokens at ${tokenUrl}`);
-
-  const response = await fetch(tokenUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: KEYCLOAK_CLIENT_ID,
-      code,
-      redirect_uri: redirectUri,
-      code_verifier: codeVerifier,
-    }).toString(),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    logDebug(`Token exchange failed: ${errorText}`);
-    return {
-      type: "failed",
-      error: `Failed to exchange code for tokens: ${errorText}`,
-    };
-  }
-
-  const tokenData = (await response.json()) as {
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-  };
-
-  const expires = Date.now() + tokenData.expires_in * 1000 - ACCESS_TOKEN_EXPIRY_BUFFER_MS;
-
-  logDebug("Successfully obtained tokens via PKCE");
-
-  return {
-    type: "success",
-    access: tokenData.access_token,
-    refresh: tokenData.refresh_token,
-    expires,
-  };
-}
 
 /**
  * Creates the OAuth authorize method using PKCE flow
@@ -164,11 +65,6 @@ export function createPkceAuthorizeMethod(): (
     }
 
     return {
-      url: authUrl.toString(),
-      instructions: isHeadless
-        ? `Open the URL above in your browser to sign in.\n\nNote: PKCE flow requires a browser on this machine.`
-        : `Complete the sign-in flow in your browser. The page should have opened automatically.`,
-      method: "auto" as const,
       callback: async (): Promise<AuthOAuthResult> => {
         return new Promise(resolve => {
           const server = http.createServer(async (req, res) => {
@@ -180,7 +76,7 @@ export function createPkceAuthorizeMethod(): (
               const error = parsedUrl.query.error as string;
 
               // Send response to browser
-              const htmlResponse = (success: boolean, message: string) => `
+              const htmlResponse = (success: boolean, message: string): string => `
                 <!DOCTYPE html>
                 <html lang="en">
                   <head>
@@ -265,8 +161,8 @@ export function createPkceAuthorizeMethod(): (
                 res.end(htmlResponse(false, error));
                 server.close();
                 resolve({
-                  type: "failed",
                   error: `Authentication failed: ${error}`,
+                  type: "failed",
                 });
                 return;
               }
@@ -276,8 +172,8 @@ export function createPkceAuthorizeMethod(): (
                 res.end(htmlResponse(false, "Invalid state parameter"));
                 server.close();
                 resolve({
-                  type: "failed",
                   error: "Invalid state parameter. Please try again.",
+                  type: "failed",
                 });
                 return;
               }
@@ -287,8 +183,8 @@ export function createPkceAuthorizeMethod(): (
                 res.end(htmlResponse(false, "No authorization code received"));
                 server.close();
                 resolve({
-                  type: "failed",
                   error: "No authorization code received.",
+                  type: "failed",
                 });
                 return;
               }
@@ -307,14 +203,14 @@ export function createPkceAuthorizeMethod(): (
             if (err.code === "EADDRINUSE") {
               logDebug(`Port ${PKCE_CALLBACK_PORT} is already in use`);
               resolve({
-                type: "failed",
                 error: `Port ${PKCE_CALLBACK_PORT} is already in use. Please close other applications using this port.`,
+                type: "failed",
               });
             } else {
               logDebug(`Server error: ${err.message}`);
               resolve({
-                type: "failed",
                 error: `Failed to start callback server: ${err.message}`,
+                type: "failed",
               });
             }
           });
@@ -328,14 +224,120 @@ export function createPkceAuthorizeMethod(): (
             () => {
               server.close();
               resolve({
-                type: "failed",
                 error: "Authentication timed out. Please try again.",
+                type: "failed",
               });
             },
             5 * 60 * 1000
           );
         });
       },
+      instructions: isHeadless
+        ? `Open the URL above in your browser to sign in.\n\nNote: PKCE flow requires a browser on this machine.`
+        : `Complete the sign-in flow in your browser. The page should have opened automatically.`,
+      method: "auto" as const,
+      url: authUrl.toString(),
     };
   };
+}
+
+/**
+ * Exchanges authorization code for tokens
+ */
+async function exchangeCodeForTokens(
+  code: string,
+  codeVerifier: string,
+  redirectUri: string
+): Promise<AuthOAuthResult> {
+  const tokenUrl = `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/token`;
+
+  logDebug(`Exchanging code for tokens at ${tokenUrl}`);
+
+  const response = await fetch(tokenUrl, {
+    body: new URLSearchParams({
+      client_id: KEYCLOAK_CLIENT_ID,
+      code,
+      code_verifier: codeVerifier,
+      grant_type: "authorization_code",
+      redirect_uri: redirectUri,
+    }).toString(),
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logDebug(`Token exchange failed: ${errorText}`);
+    return {
+      error: `Failed to exchange code for tokens: ${errorText}`,
+      type: "failed",
+    };
+  }
+
+  const tokenData = (await response.json()) as {
+    access_token: string;
+    expires_in: number;
+    refresh_token: string;
+  };
+
+  const expires = Date.now() + tokenData.expires_in * 1000 - ACCESS_TOKEN_EXPIRY_BUFFER_MS;
+
+  logDebug("Successfully obtained tokens via PKCE");
+
+  return {
+    access: tokenData.access_token,
+    expires,
+    refresh: tokenData.refresh_token,
+    type: "success",
+  };
+}
+
+/**
+ * Generate code_challenge from code_verifier using S256 method
+ */
+function generateCodeChallenge(verifier: string): string {
+  return crypto.createHash("sha256").update(verifier).digest("base64url");
+}
+
+/**
+ * Generate a random string for PKCE code_verifier
+ */
+function generateCodeVerifier(): string {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+/**
+ * Checks if running in a headless environment
+ */
+function isHeadlessEnvironment(): boolean {
+  return !!(
+    process.env.SSH_CONNECTION ||
+    process.env.SSH_CLIENT ||
+    process.env.SSH_TTY ||
+    process.env.OPENCODE_HEADLESS ||
+    process.env.CI
+  );
+}
+
+/**
+ * Opens a URL in the user's default browser
+ */
+function openBrowserUrl(url: string): void {
+  try {
+    const platform = process.platform;
+    const command = platform === "darwin" ? "open" : platform === "win32" ? "rundll32" : "xdg-open";
+    const args = platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
+
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref?.();
+
+    logDebug(`Opened browser with command: ${command}`);
+  } catch (error) {
+    logDebug(`Failed to open browser: ${error}`);
+  }
 }

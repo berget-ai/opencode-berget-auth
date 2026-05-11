@@ -28,14 +28,14 @@ export const server = BergetAuthPlugin;
 // Named exports for backward compatibility
 export { BergetAuthPlugin, BergetOAuthPlugin };
 
+// Re-export utilities that might be useful
+export { accessTokenExpired, isOAuthAuth } from "./src/plugin/auth";
+
+export { createPkceAuthorizeMethod } from "./src/plugin/pkce-flow";
 // Re-export types for consumers
 export type {
-  OAuthAuthDetails,
   AuthDetails,
   AuthOAuthResult,
   BergetUser,
+  OAuthAuthDetails,
 } from "./src/plugin/types";
-
-// Re-export utilities that might be useful
-export { isOAuthAuth, accessTokenExpired } from "./src/plugin/auth";
-export { createPkceAuthorizeMethod } from "./src/plugin/pkce-flow";

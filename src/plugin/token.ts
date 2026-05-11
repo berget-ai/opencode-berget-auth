@@ -2,9 +2,10 @@
  * Token refresh logic for Berget OAuth
  */
 
-import { getTokenRefreshEndpoint, ACCESS_TOKEN_EXPIRY_BUFFER_MS } from "../constants";
-import { logDebug } from "./debug";
 import type { OAuthAuthDetails, TokenRefreshResponse } from "./types";
+
+import { ACCESS_TOKEN_EXPIRY_BUFFER_MS, getTokenRefreshEndpoint } from "../constants";
+import { logDebug } from "./debug";
 
 // Track in-flight refresh requests to prevent duplicates
 const refreshInFlight = new Map<string, Promise<OAuthAuthDetails | undefined>>();
@@ -42,6 +43,23 @@ export async function refreshAccessTokenDirect(
 }
 
 /**
+ * Parses error response from token endpoint
+ */
+function parseErrorResponse(
+  text: string
+): undefined | { error?: string; error_description?: string } {
+  if (!text) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Internal implementation of token refresh
  */
 async function refreshAccessTokenInternal(
@@ -53,13 +71,13 @@ async function refreshAccessTokenInternal(
 
   try {
     const response = await fetch(getTokenRefreshEndpoint(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
         refresh_token: refreshToken,
       }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -98,23 +116,6 @@ async function refreshAccessTokenInternal(
     return updatedAuth;
   } catch (error) {
     console.error("Failed to refresh Berget access token:", error);
-    return undefined;
-  }
-}
-
-/**
- * Parses error response from token endpoint
- */
-function parseErrorResponse(
-  text: string
-): { error?: string; error_description?: string } | undefined {
-  if (!text) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
     return undefined;
   }
 }
