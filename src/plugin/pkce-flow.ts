@@ -16,6 +16,7 @@ import {
   getKeycloakRealm,
   KEYCLOAK_CLIENT_ID,
   PKCE_CALLBACK_PORT,
+  ACCESS_TOKEN_EXPIRY_BUFFER_MS,
 } from "../constants";
 import { logDebug } from "./debug";
 import type { AuthorizeResult, AuthOAuthResult } from "./types";
@@ -109,7 +110,7 @@ async function exchangeCodeForTokens(
     expires_in: number;
   };
 
-  const expires = Date.now() + tokenData.expires_in * 1000;
+  const expires = Date.now() + tokenData.expires_in * 1000 - ACCESS_TOKEN_EXPIRY_BUFFER_MS;
 
   logDebug("Successfully obtained tokens via PKCE");
 

@@ -2,7 +2,7 @@
  * Token refresh logic for Berget OAuth
  */
 
-import { getTokenRefreshEndpoint } from "../constants";
+import { getTokenRefreshEndpoint, ACCESS_TOKEN_EXPIRY_BUFFER_MS } from "../constants";
 import { logDebug } from "./debug";
 import type { OAuthAuthDetails, TokenRefreshResponse } from "./types";
 
@@ -91,7 +91,7 @@ async function refreshAccessTokenInternal(
     const updatedAuth: OAuthAuthDetails = {
       ...auth,
       access: data.token,
-      expires: Date.now() + data.expires_in * 1000,
+      expires: Date.now() + data.expires_in * 1000 - ACCESS_TOKEN_EXPIRY_BUFFER_MS,
       refresh: data.refresh_token || refreshToken, // Use new refresh token if rotated
     };
 
