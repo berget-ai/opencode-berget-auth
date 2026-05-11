@@ -2,10 +2,10 @@
  * Token refresh logic for Berget OAuth
  */
 
-import type { OAuthAuthDetails, TokenRefreshResponse } from "./types";
+import type { OAuthAuthDetails, TokenRefreshResponse } from './types';
 
-import { ACCESS_TOKEN_EXPIRY_BUFFER_MS, getTokenRefreshEndpoint } from "../constants";
-import { logDebug } from "./debug";
+import { ACCESS_TOKEN_EXPIRY_BUFFER_MS, getTokenRefreshEndpoint } from '../constants';
+import { logDebug } from './debug';
 
 // Track in-flight refresh requests to prevent duplicates
 const refreshInFlight = new Map<string, Promise<OAuthAuthDetails | undefined>>();
@@ -15,19 +15,19 @@ const refreshInFlight = new Map<string, Promise<OAuthAuthDetails | undefined>>()
  * Direct version without client dependency (for loader use)
  */
 export async function refreshAccessTokenDirect(
-  auth: OAuthAuthDetails
+  auth: OAuthAuthDetails,
 ): Promise<OAuthAuthDetails | undefined> {
   const refreshToken = auth.refresh;
 
   if (!refreshToken) {
-    logDebug("No refresh token available");
+    logDebug('No refresh token available');
     return undefined;
   }
 
   // Check if refresh is already in flight
   const pending = refreshInFlight.get(refreshToken);
   if (pending) {
-    logDebug("Refresh already in flight, waiting for result");
+    logDebug('Refresh already in flight, waiting for result');
     return pending;
   }
 
@@ -46,7 +46,7 @@ export async function refreshAccessTokenDirect(
  * Parses error response from token endpoint
  */
 function parseErrorResponse(
-  text: string
+  text: string,
 ): undefined | { error?: string; error_description?: string } {
   if (!text) {
     return undefined;
@@ -63,11 +63,11 @@ function parseErrorResponse(
  * Internal implementation of token refresh
  */
 async function refreshAccessTokenInternal(
-  auth: OAuthAuthDetails
+  auth: OAuthAuthDetails,
 ): Promise<OAuthAuthDetails | undefined> {
   const refreshToken = auth.refresh;
 
-  logDebug("Refreshing access token");
+  logDebug('Refreshing access token');
 
   try {
     const response = await fetch(getTokenRefreshEndpoint(), {
@@ -75,22 +75,22 @@ async function refreshAccessTokenInternal(
         refresh_token: refreshToken,
       }),
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
-      method: "POST",
+      method: 'POST',
     });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
+      const errorText = await response.text().catch(() => '');
       logDebug(`Token refresh failed: ${response.status} ${errorText}`);
 
       // Handle revoked/invalid refresh token
       if (response.status === 401 || response.status === 400) {
         const errorData = parseErrorResponse(errorText);
 
-        if (errorData?.error === "invalid_grant" || errorData?.error === "invalid_token") {
+        if (errorData?.error === 'invalid_grant' || errorData?.error === 'invalid_token') {
           console.warn(
-            "[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate."
+            '[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate.',
           );
         }
 
@@ -115,7 +115,7 @@ async function refreshAccessTokenInternal(
 
     return updatedAuth;
   } catch (error) {
-    console.error("Failed to refresh Berget access token:", error);
+    console.error('Failed to refresh Berget access token:', error);
     return undefined;
   }
 }

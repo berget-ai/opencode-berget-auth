@@ -2,8 +2,8 @@
  * Dynamic model fetching from Berget API
  */
 
-import { getModelsEndpoint } from "../constants";
-import { logDebug, logError } from "./debug";
+import { getModelsEndpoint } from '../constants';
+import { logDebug, logError } from './debug';
 
 // Response from /v1/models/chat endpoint
 interface ChatModel {
@@ -39,18 +39,18 @@ export function clearModelCache(): void {
 export async function fetchBergetModels(): Promise<Record<string, object>> {
   // Return cached models if still valid
   if (cachedModels && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
-    logDebug("Returning cached models");
+    logDebug('Returning cached models');
     return cachedModels;
   }
 
-  logDebug("Fetching chat models from Berget API");
+  logDebug('Fetching chat models from Berget API');
 
   try {
     const response = await fetch(getModelsEndpoint(), {
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
-      method: "GET",
+      method: 'GET',
     });
 
     if (!response.ok) {
@@ -78,7 +78,7 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
 
     return models;
   } catch (error) {
-    logError("Error fetching models", error);
+    logError('Error fetching models', error);
     return getDefaultModels();
   }
 }
@@ -88,9 +88,9 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
  */
 function getDefaultModels(): Record<string, object> {
   return {
-    "meta-llama/Llama-3.1-8B-Instruct": {},
-    "meta-llama/Llama-3.3-70B-Instruct": {},
-    "mistralai/Mistral-Small-3.2-24B-Instruct-2506": {},
-    "openai/gpt-oss-120b": {},
+    'meta-llama/Llama-3.1-8B-Instruct': {},
+    'meta-llama/Llama-3.3-70B-Instruct': {},
+    'mistralai/Mistral-Small-3.2-24B-Instruct-2506': {},
+    'openai/gpt-oss-120b': {},
   };
 }

@@ -3,16 +3,16 @@
  * Based on @opencode-ai/plugin types
  */
 
-import type { ToolDefinition } from "@opencode-ai/plugin";
-import type { Auth, Config, createOpencodeClient, Provider } from "@opencode-ai/sdk";
+import type { ToolDefinition } from '@opencode-ai/plugin';
+import type { Auth, Config, createOpencodeClient, Provider } from '@opencode-ai/sdk';
 
 /**
  * Auth hook method - API key type
  */
 export interface ApiAuthMethod {
-  authorize?(): Promise<{ key: string; type: "success" } | { type: "failed" }>;
+  authorize?(): Promise<{ key: string; type: 'success' } | { type: 'failed' }>;
   label: string;
-  type: "api";
+  type: 'api';
 }
 
 export type AuthDetails = NonOAuthAuthDetails | OAuthAuthDetails;
@@ -38,16 +38,16 @@ export type AuthOAuthResult =
       expires: number;
       provider?: string;
       refresh: string;
-      type: "success";
+      type: 'success';
     }
   | {
       error?: string;
-      type: "failed";
+      type: 'failed';
     }
   | {
       key: string;
       provider?: string;
-      type: "success";
+      type: 'success';
     };
 
 /**
@@ -56,7 +56,7 @@ export type AuthOAuthResult =
 export interface AuthorizeResult {
   callback: (() => Promise<AuthOAuthResult>) | ((code: string) => Promise<AuthOAuthResult>);
   instructions: string;
-  method: "auto" | "code";
+  method: 'auto' | 'code';
   url: string;
 }
 
@@ -98,7 +98,7 @@ export interface OAuthAuthDetails {
   access?: string;
   expires?: number;
   refresh: string;
-  type: "oauth";
+  type: 'oauth';
 }
 
 /**
@@ -107,7 +107,7 @@ export interface OAuthAuthDetails {
 export interface OAuthAuthMethod {
   authorize(): Promise<AuthorizeResult>;
   label: string;
-  type: "oauth";
+  type: 'oauth';
 }
 
 /**

@@ -11,16 +11,16 @@
  * 4. Complete authentication in browser
  */
 
-import type { Auth, Config, Provider } from "@opencode-ai/sdk";
+import type { Auth, Config, Provider } from '@opencode-ai/sdk';
 
-import type { Hooks, OAuthAuthDetails, PluginInput } from "./plugin/types";
+import type { Hooks, OAuthAuthDetails, PluginInput } from './plugin/types';
 
-import { BERGET_PROVIDER_ID, getInferenceUrl } from "./constants";
-import { accessTokenExpired, isOAuthAuth } from "./plugin/auth";
-import { logDebug, logError } from "./plugin/debug";
-import { fetchBergetModels } from "./plugin/models";
-import { createPkceAuthorizeMethod } from "./plugin/pkce-flow";
-import { refreshAccessTokenDirect } from "./plugin/token";
+import { BERGET_PROVIDER_ID, getInferenceUrl } from './constants';
+import { accessTokenExpired, isOAuthAuth } from './plugin/auth';
+import { logDebug, logError } from './plugin/debug';
+import { fetchBergetModels } from './plugin/models';
+import { createPkceAuthorizeMethod } from './plugin/pkce-flow';
+import { refreshAccessTokenDirect } from './plugin/token';
 
 /**
  * Main plugin export - Berget OAuth Plugin for OpenCode
@@ -32,7 +32,7 @@ import { refreshAccessTokenDirect } from "./plugin/token";
  * 4. Handles token refresh automatically
  */
 export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promise<Hooks> => {
-  logDebug("Initializing Berget Auth Plugin");
+  logDebug('Initializing Berget Auth Plugin');
 
   return {
     // Authentication configuration
@@ -42,7 +42,7 @@ export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promis
       // apiKey from loader and never calls loader again.
       loader: async (
         getAuth: () => Promise<Auth>,
-        _provider: Provider
+        _provider: Provider,
       ): Promise<Record<string, unknown>> => {
         const auth = await getAuth();
 
@@ -55,10 +55,10 @@ export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promis
               apiKey,
               fetch: async (
                 input: Request | string | URL,
-                init?: RequestInit
+                init?: RequestInit,
               ): Promise<Response> => {
                 const headers = new Headers(init?.headers);
-                headers.set("Authorization", `Bearer ${apiKey}`);
+                headers.set('Authorization', `Bearer ${apiKey}`);
                 return fetch(input, { ...init, headers });
               },
             };
@@ -74,22 +74,22 @@ export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promis
         // OpenCode only calls loader once at startup and caches apiKey,
         // but fetch is called on every API request by @ai-sdk/openai-compatible.
         return {
-          apiKey: currentAuth.access || "",
+          apiKey: currentAuth.access || '',
           fetch: async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
             if (accessTokenExpired(currentAuth)) {
-              logDebug("Token expired, refreshing before request...");
+              logDebug('Token expired, refreshing before request...');
               const refreshed = await refreshAccessTokenDirect(currentAuth);
               if (refreshed) {
                 currentAuth = refreshed;
-                logDebug("Token refreshed successfully");
+                logDebug('Token refreshed successfully');
               } else {
-                logError("Token refresh failed");
+                logError('Token refresh failed');
               }
             }
 
             const headers = new Headers(init?.headers);
             if (currentAuth.access) {
-              headers.set("Authorization", `Bearer ${currentAuth.access}`);
+              headers.set('Authorization', `Bearer ${currentAuth.access}`);
             }
 
             return fetch(input, {
@@ -104,12 +104,12 @@ export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promis
       methods: [
         {
           authorize: createPkceAuthorizeMethod(),
-          label: "Login with Berget",
-          type: "oauth" as const,
+          label: 'Login with Berget',
+          type: 'oauth' as const,
         },
         {
-          label: "Enter Berget API Key manually",
-          type: "api" as const,
+          label: 'Enter Berget API Key manually',
+          type: 'api' as const,
         },
       ],
 
@@ -118,12 +118,12 @@ export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promis
 
     // Configure OpenCode with Berget-specific settings
     config: async (config: Config): Promise<void> => {
-      logDebug("Configuring OpenCode for Berget");
+      logDebug('Configuring OpenCode for Berget');
 
       // Always set the API URL and models from env var (allows runtime override)
       // We always fetch models dynamically to override any stale models in the binary
       config.provider ??= {};
-      config.provider.berget ??= { api: "", models: {}, options: {} };
+      config.provider.berget ??= { api: '', models: {}, options: {} };
 
       const inferenceUrl = getInferenceUrl();
       config.provider.berget.api = inferenceUrl;
@@ -131,7 +131,7 @@ export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promis
       config.provider.berget.options.baseURL = inferenceUrl;
       config.provider.berget.models = await fetchBergetModels();
       logDebug(
-        `Berget provider configured: ${inferenceUrl}, ${Object.keys(config.provider.berget.models).length} models`
+        `Berget provider configured: ${inferenceUrl}, ${Object.keys(config.provider.berget.models).length} models`,
       );
     },
   };

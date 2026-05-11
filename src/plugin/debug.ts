@@ -7,9 +7,9 @@
  */
 export function isDebugEnabled(): boolean {
   return (
-    process.env.OPENCODE_BERGET_DEBUG === "1" ||
-    process.env.OPENCODE_BERGET_DEBUG === "true" ||
-    process.env.DEBUG?.includes("berget") === true
+    process.env.OPENCODE_BERGET_DEBUG === '1' ||
+    process.env.OPENCODE_BERGET_DEBUG === 'true' ||
+    process.env.DEBUG?.includes('berget') === true
   );
 }
 

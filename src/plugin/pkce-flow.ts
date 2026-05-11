@@ -7,12 +7,12 @@
  * authentication than device flow.
  */
 
-import { spawn } from "node:child_process";
-import * as crypto from "node:crypto";
-import * as http from "node:http";
-import * as url from "node:url";
+import { spawn } from 'node:child_process';
+import * as crypto from 'node:crypto';
+import * as http from 'node:http';
+import * as url from 'node:url';
 
-import type { AuthOAuthResult, AuthorizeResult } from "./types";
+import type { AuthOAuthResult, AuthorizeResult } from './types';
 
 import {
   ACCESS_TOKEN_EXPIRY_BUFFER_MS,
@@ -20,21 +20,21 @@ import {
   getKeycloakUrl,
   KEYCLOAK_CLIENT_ID,
   PKCE_CALLBACK_PORT,
-} from "../constants";
-import { logDebug } from "./debug";
+} from '../constants';
+import { logDebug } from './debug';
 
 /**
  * Creates the OAuth authorize method using PKCE flow
  * This is called when user selects "Login with Berget" in OpenCode
  */
 export function createPkceAuthorizeMethod(): (
-  inputs?: Record<string, string>
+  inputs?: Record<string, string>,
 ) => Promise<AuthorizeResult> {
   return async (_inputs?: Record<string, string>): Promise<AuthorizeResult> => {
     const isHeadless = isHeadlessEnvironment();
 
     if (isHeadless) {
-      logDebug("Headless environment detected - PKCE flow may not work");
+      logDebug('Headless environment detected - PKCE flow may not work');
       // In headless mode, we could fall back to device flow
       // For now, we'll still try PKCE but warn the user
     }
@@ -42,20 +42,20 @@ export function createPkceAuthorizeMethod(): (
     // Generate PKCE parameters
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
-    const state = crypto.randomBytes(16).toString("hex");
+    const state = crypto.randomBytes(16).toString('hex');
     const redirectUri = `http://localhost:${PKCE_CALLBACK_PORT}/callback`;
 
     // Build authorization URL
     const authUrl = new URL(
-      `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/auth`
+      `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/auth`,
     );
-    authUrl.searchParams.set("client_id", KEYCLOAK_CLIENT_ID);
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("scope", "openid email profile offline_access");
-    authUrl.searchParams.set("state", state);
-    authUrl.searchParams.set("code_challenge", codeChallenge);
-    authUrl.searchParams.set("code_challenge_method", "S256");
+    authUrl.searchParams.set('client_id', KEYCLOAK_CLIENT_ID);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('scope', 'openid email profile offline_access');
+    authUrl.searchParams.set('state', state);
+    authUrl.searchParams.set('code_challenge', codeChallenge);
+    authUrl.searchParams.set('code_challenge_method', 'S256');
 
     logDebug(`Authorization URL: ${authUrl.toString()}`);
 
@@ -66,11 +66,11 @@ export function createPkceAuthorizeMethod(): (
 
     return {
       callback: async (): Promise<AuthOAuthResult> => {
-        return new Promise(resolve => {
+        return new Promise((resolve) => {
           const server = http.createServer(async (req, res) => {
-            const parsedUrl = url.parse(req.url || "", true);
+            const parsedUrl = url.parse(req.url || '', true);
 
-            if (parsedUrl.pathname === "/callback") {
+            if (parsedUrl.pathname === '/callback') {
               const receivedState = parsedUrl.query.state as string;
               const code = parsedUrl.query.code as string;
               const error = parsedUrl.query.error as string;
@@ -82,7 +82,7 @@ export function createPkceAuthorizeMethod(): (
                   <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Berget - ${success ? "Authentication Successful" : "Authentication Failed"}</title>
+                    <title>Berget - ${success ? 'Authentication Successful' : 'Authentication Failed'}</title>
                     <style>
                       * { margin: 0; padding: 0; box-sizing: border-box; }
                       body {
@@ -104,15 +104,15 @@ export function createPkceAuthorizeMethod(): (
                         height: 80px;
                         background: ${
                           success
-                            ? "linear-gradient(135deg, #4ade80 0%, #22c55e 100%)"
-                            : "linear-gradient(135deg, #f87171 0%, #ef4444 100%)"
+                            ? 'linear-gradient(135deg, #4ade80 0%, #22c55e 100%)'
+                            : 'linear-gradient(135deg, #f87171 0%, #ef4444 100%)'
                         };
                         border-radius: 50%;
                         display: flex;
                         align-items: center;
                         justify-content: center;
                         margin: 0 auto 1.5rem;
-                        box-shadow: 0 4px 20px ${success ? "rgba(74, 222, 128, 0.3)" : "rgba(248, 113, 113, 0.3)"};
+                        box-shadow: 0 4px 20px ${success ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)'};
                       }
                       .icon svg {
                         width: 40px;
@@ -148,7 +148,7 @@ export function createPkceAuthorizeMethod(): (
                             : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
                         }
                       </div>
-                      <h1>${success ? "Authentication Successful" : "Authentication Failed"}</h1>
+                      <h1>${success ? 'Authentication Successful' : 'Authentication Failed'}</h1>
                       <p>${message}</p>
                       <div class="brand">BERGET</div>
                     </div>
@@ -157,41 +157,41 @@ export function createPkceAuthorizeMethod(): (
               `;
 
               if (error) {
-                res.writeHead(200, { "Content-Type": "text/html" });
+                res.writeHead(200, { 'Content-Type': 'text/html' });
                 res.end(htmlResponse(false, error));
                 server.close();
                 resolve({
                   error: `Authentication failed: ${error}`,
-                  type: "failed",
+                  type: 'failed',
                 });
                 return;
               }
 
               if (receivedState !== state) {
-                res.writeHead(200, { "Content-Type": "text/html" });
-                res.end(htmlResponse(false, "Invalid state parameter"));
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(htmlResponse(false, 'Invalid state parameter'));
                 server.close();
                 resolve({
-                  error: "Invalid state parameter. Please try again.",
-                  type: "failed",
+                  error: 'Invalid state parameter. Please try again.',
+                  type: 'failed',
                 });
                 return;
               }
 
               if (!code) {
-                res.writeHead(200, { "Content-Type": "text/html" });
-                res.end(htmlResponse(false, "No authorization code received"));
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(htmlResponse(false, 'No authorization code received'));
                 server.close();
                 resolve({
-                  error: "No authorization code received.",
-                  type: "failed",
+                  error: 'No authorization code received.',
+                  type: 'failed',
                 });
                 return;
               }
 
               // Exchange code for tokens
-              res.writeHead(200, { "Content-Type": "text/html" });
-              res.end(htmlResponse(true, "You can close this window and return to OpenCode."));
+              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.end(htmlResponse(true, 'You can close this window and return to OpenCode.'));
               server.close();
 
               const result = await exchangeCodeForTokens(code, codeVerifier, redirectUri);
@@ -199,18 +199,18 @@ export function createPkceAuthorizeMethod(): (
             }
           });
 
-          server.on("error", (err: NodeJS.ErrnoException) => {
-            if (err.code === "EADDRINUSE") {
+          server.on('error', (err: NodeJS.ErrnoException) => {
+            if (err.code === 'EADDRINUSE') {
               logDebug(`Port ${PKCE_CALLBACK_PORT} is already in use`);
               resolve({
                 error: `Port ${PKCE_CALLBACK_PORT} is already in use. Please close other applications using this port.`,
-                type: "failed",
+                type: 'failed',
               });
             } else {
               logDebug(`Server error: ${err.message}`);
               resolve({
                 error: `Failed to start callback server: ${err.message}`,
-                type: "failed",
+                type: 'failed',
               });
             }
           });
@@ -224,18 +224,18 @@ export function createPkceAuthorizeMethod(): (
             () => {
               server.close();
               resolve({
-                error: "Authentication timed out. Please try again.",
-                type: "failed",
+                error: 'Authentication timed out. Please try again.',
+                type: 'failed',
               });
             },
-            5 * 60 * 1000
+            5 * 60 * 1000,
           );
         });
       },
       instructions: isHeadless
         ? `Open the URL above in your browser to sign in.\n\nNote: PKCE flow requires a browser on this machine.`
         : `Complete the sign-in flow in your browser. The page should have opened automatically.`,
-      method: "auto" as const,
+      method: 'auto' as const,
       url: authUrl.toString(),
     };
   };
@@ -247,7 +247,7 @@ export function createPkceAuthorizeMethod(): (
 async function exchangeCodeForTokens(
   code: string,
   codeVerifier: string,
-  redirectUri: string
+  redirectUri: string,
 ): Promise<AuthOAuthResult> {
   const tokenUrl = `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/token`;
 
@@ -258,13 +258,13 @@ async function exchangeCodeForTokens(
       client_id: KEYCLOAK_CLIENT_ID,
       code,
       code_verifier: codeVerifier,
-      grant_type: "authorization_code",
+      grant_type: 'authorization_code',
       redirect_uri: redirectUri,
     }).toString(),
     headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
-    method: "POST",
+    method: 'POST',
   });
 
   if (!response.ok) {
@@ -272,7 +272,7 @@ async function exchangeCodeForTokens(
     logDebug(`Token exchange failed: ${errorText}`);
     return {
       error: `Failed to exchange code for tokens: ${errorText}`,
-      type: "failed",
+      type: 'failed',
     };
   }
 
@@ -284,13 +284,13 @@ async function exchangeCodeForTokens(
 
   const expires = Date.now() + tokenData.expires_in * 1000 - ACCESS_TOKEN_EXPIRY_BUFFER_MS;
 
-  logDebug("Successfully obtained tokens via PKCE");
+  logDebug('Successfully obtained tokens via PKCE');
 
   return {
     access: tokenData.access_token,
     expires,
     refresh: tokenData.refresh_token,
-    type: "success",
+    type: 'success',
   };
 }
 
@@ -298,14 +298,14 @@ async function exchangeCodeForTokens(
  * Generate code_challenge from code_verifier using S256 method
  */
 function generateCodeChallenge(verifier: string): string {
-  return crypto.createHash("sha256").update(verifier).digest("base64url");
+  return crypto.createHash('sha256').update(verifier).digest('base64url');
 }
 
 /**
  * Generate a random string for PKCE code_verifier
  */
 function generateCodeVerifier(): string {
-  return crypto.randomBytes(32).toString("base64url");
+  return crypto.randomBytes(32).toString('base64url');
 }
 
 /**
@@ -327,12 +327,12 @@ function isHeadlessEnvironment(): boolean {
 function openBrowserUrl(url: string): void {
   try {
     const platform = process.platform;
-    const command = platform === "darwin" ? "open" : platform === "win32" ? "rundll32" : "xdg-open";
-    const args = platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
+    const command = platform === 'darwin' ? 'open' : platform === 'win32' ? 'rundll32' : 'xdg-open';
+    const args = platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
 
     const child = spawn(command, args, {
       detached: true,
-      stdio: "ignore",
+      stdio: 'ignore',
     });
     child.unref?.();
 
