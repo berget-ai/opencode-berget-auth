@@ -31,7 +31,7 @@ import { refreshAccessTokenDirect } from './plugin/token';
  * 3. Provides custom fetch with automatic token refresh
  * 4. Handles token refresh automatically
  */
-export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promise<Hooks> => {
+export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> => {
   logDebug('Initializing Berget Auth Plugin');
 
   return {
@@ -78,7 +78,7 @@ export const BergetAuthPlugin = async ({ client: _client }: PluginInput): Promis
           fetch: async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
             if (accessTokenExpired(currentAuth)) {
               logDebug('Token expired, refreshing before request...');
-              const refreshed = await refreshAccessTokenDirect(currentAuth);
+              const refreshed = await refreshAccessTokenDirect(currentAuth, client);
               if (refreshed) {
                 currentAuth = refreshed;
                 logDebug('Token refreshed successfully');
