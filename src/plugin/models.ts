@@ -77,6 +77,10 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
       // Enable vision support for models that support image input
       if (VISION_MODELS.has(model.id)) {
         modelConfig.attachment = true;
+        modelConfig.modalities = {
+          input: ['text', 'image'],
+          output: ['text'],
+        };
       }
 
       models[model.id] = modelConfig;
