@@ -3,6 +3,7 @@
  */
 
 import type { OAuthAuthDetails, TokenRefreshResponse } from './types';
+import type { PluginInput } from './types';
 
 import { ACCESS_TOKEN_EXPIRY_BUFFER_MS, getTokenRefreshEndpoint } from '../constants';
 import { logDebug } from './debug';
@@ -12,10 +13,11 @@ const refreshInFlight = new Map<string, Promise<OAuthAuthDetails | undefined>>()
 
 /**
  * Refreshes an expired access token using the refresh token
- * Direct version without client dependency (for loader use)
+ * Accepts client for persisting refreshed tokens to OpenCode
  */
 export async function refreshAccessTokenDirect(
   auth: OAuthAuthDetails,
+  client?: PluginInput['client'],
 ): Promise<OAuthAuthDetails | undefined> {
   const refreshToken = auth.refresh;
 
@@ -32,7 +34,7 @@ export async function refreshAccessTokenDirect(
   }
 
   // Start refresh and track the promise
-  const refreshPromise = refreshAccessTokenInternal(auth);
+  const refreshPromise = refreshAccessTokenInternal(auth, client);
   refreshInFlight.set(refreshToken, refreshPromise);
 
   try {
@@ -64,6 +66,7 @@ function parseErrorResponse(
  */
 async function refreshAccessTokenInternal(
   auth: OAuthAuthDetails,
+  client?: PluginInput['client'],
 ): Promise<OAuthAuthDetails | undefined> {
   const refreshToken = auth.refresh;
 
@@ -112,6 +115,25 @@ async function refreshAccessTokenInternal(
       expires: Date.now() + data.expires_in * 1000 - ACCESS_TOKEN_EXPIRY_BUFFER_MS,
       refresh: data.refresh_token || refreshToken, // Use new refresh token if rotated
     };
+
+    // Persist updated tokens to OpenCode so they survive restarts
+    if (client && updatedAuth.access && typeof updatedAuth.expires === 'number') {
+      try {
+        await client.auth.set({
+          body: {
+            access: updatedAuth.access,
+            expires: updatedAuth.expires,
+            refresh: updatedAuth.refresh,
+            type: 'oauth',
+          },
+          path: { id: 'berget' },
+        });
+        logDebug('Token refresh persisted to OpenCode');
+      } catch (error) {
+        // Non-fatal: in-memory token still works for this session
+        console.warn('[Berget Auth] Failed to persist token refresh:', error);
+      }
+    }
 
     return updatedAuth;
   } catch (error) {
