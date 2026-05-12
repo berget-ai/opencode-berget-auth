@@ -19,6 +19,11 @@ interface ChatModelsResponse {
   models: ChatModel[];
 }
 
+// Models that support vision/image input
+const VISION_MODELS = new Set([
+  "moonshotai/Kimi-K2.6",
+]);
+
 // Cache for models to avoid repeated API calls
 let cachedModels: Record<string, object> | undefined;
 let cacheTimestamp = 0;
@@ -63,11 +68,18 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
     const models: Record<string, object> = {};
 
     for (const model of data.models) {
-      models[model.id] = {
+      const modelConfig: Record<string, unknown> = {
         contextWindow: model.contextWindow,
         // OpenCode model config
         name: model.id,
       };
+
+      // Enable vision support for models that support image input
+      if (VISION_MODELS.has(model.id)) {
+        modelConfig.attachment = true;
+      }
+
+      models[model.id] = modelConfig;
     }
 
     // Cache the results
