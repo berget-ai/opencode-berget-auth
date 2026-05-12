@@ -18,7 +18,7 @@ type MockClient = {
 function createMockClient(): MockClient {
   return {
     auth: {
-      set: vi.fn().mockResolvedValue(),
+      set: vi.fn().mockResolvedValue(undefined),
     },
   };
 }
