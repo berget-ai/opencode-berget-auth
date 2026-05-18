@@ -18,6 +18,7 @@ type MockClient = {
 function createMockClient(): MockClient {
   return {
     auth: {
+      // eslint-disable-next-line unicorn/no-useless-undefined
       set: vi.fn().mockResolvedValue(undefined),
     },
   };
@@ -40,12 +41,14 @@ describe('refreshAccessTokenDirect', () => {
     vi.unstubAllGlobals();
   });
 
-  it('returns undefined when no refresh token is available', async () => {
+  it('returns failure when no refresh token is available', async () => {
     const auth: OAuthAuthDetails = { refresh: '', type: 'oauth' };
 
     const result = await refreshAccessTokenDirect(auth);
 
-    expect(result).toBeUndefined();
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('No refresh token available');
   });
 
   it('successfully refreshes access token and persists to OpenCode', async () => {
@@ -70,11 +73,11 @@ describe('refreshAccessTokenDirect', () => {
 
     const result = await refreshAccessTokenDirect(auth, client as unknown as PluginInput['client']);
 
-    expect(result).toBeDefined();
-    if (!result) throw new Error('result should be defined');
-    expect(result.access).toBe(newToken);
-    expect(result.refresh).toBe('refresh-token-1');
-    expect(result.expires).toBeGreaterThan(Date.now());
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error('result should be success');
+    expect(result.auth.access).toBe(newToken);
+    expect(result.auth.refresh).toBe('refresh-token-1');
+    expect(result.auth.expires).toBeGreaterThan(Date.now());
 
     expect(client.auth.set).toHaveBeenCalledTimes(1);
     expect(client.auth.set).toHaveBeenCalledWith({
@@ -115,9 +118,9 @@ describe('refreshAccessTokenDirect', () => {
 
     const result = await refreshAccessTokenDirect(auth, client as unknown as PluginInput['client']);
 
-    expect(result).toBeDefined();
-    if (!result) throw new Error('result should be defined');
-    expect(result.refresh).toBe(newRefresh);
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error('result should be success');
+    expect(result.auth.refresh).toBe(newRefresh);
     expect(client.auth.set).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({
@@ -146,7 +149,7 @@ describe('refreshAccessTokenDirect', () => {
 
     const result = await refreshAccessTokenDirect(auth);
 
-    expect(result).toBeDefined();
+    expect(result.success).toBe(true);
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1);
     // client.auth.set was never called because no client was passed
   });
@@ -175,9 +178,9 @@ describe('refreshAccessTokenDirect', () => {
 
     const result = await refreshAccessTokenDirect(auth, client as unknown as PluginInput['client']);
 
-    expect(result).toBeDefined();
-    if (!result) throw new Error('result should be defined');
-    expect(result.access).toBe('token');
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error('result should be success');
+    expect(result.auth.access).toBe('token');
     expect(warnSpy).toHaveBeenCalledWith(
       '[Berget Auth] Failed to persist token refresh:',
       expect.any(Error),
@@ -206,7 +209,7 @@ describe('refreshAccessTokenDirect', () => {
 
     const result = await refreshAccessTokenDirect(auth, client as unknown as PluginInput['client']);
 
-    expect(result).toBeDefined();
+    expect(result.success).toBe(true);
     // Because access is empty string (falsy), persistence is skipped
     expect(client.auth.set).not.toHaveBeenCalled();
   });
@@ -266,7 +269,9 @@ describe('refreshAccessTokenDirect', () => {
 
     const result = await refreshAccessTokenDirect(auth);
 
-    expect(result).toBeUndefined();
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('Refresh token is invalid or revoked');
     expect(warnSpy).toHaveBeenCalledWith(
       '[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate.',
     );
@@ -293,7 +298,9 @@ describe('refreshAccessTokenDirect', () => {
 
     const result = await refreshAccessTokenDirect(auth);
 
-    expect(result).toBeUndefined();
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('Refresh token is invalid or revoked');
     expect(warnSpy).toHaveBeenCalledWith(
       '[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate.',
     );
@@ -318,7 +325,9 @@ describe('refreshAccessTokenDirect', () => {
 
     const result = await refreshAccessTokenDirect(auth);
 
-    expect(result).toBeUndefined();
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('Token refresh failed: HTTP 503');
   });
 
   it('handles network errors gracefully', async () => {
@@ -335,7 +344,9 @@ describe('refreshAccessTokenDirect', () => {
 
     const result = await refreshAccessTokenDirect(auth);
 
-    expect(result).toBeUndefined();
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('Network error: Network failure');
     expect(errorSpy).toHaveBeenCalledWith(
       'Failed to refresh Berget access token:',
       expect.any(Error),
@@ -376,10 +387,9 @@ describe('refreshAccessTokenDirect', () => {
     const result = await refreshAccessTokenDirect(auth, client as unknown as PluginInput['client']);
 
     // Token must still be usable in-memory for the current session.
-    expect(result).toBeDefined();
-    expect(result).toBeDefined();
-    if (!result) throw new Error('result should be defined');
-    expect(result.access).toBe('new-access-token');
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error('result should be success');
+    expect(result.auth.access).toBe('new-access-token');
 
     // Token must be persisted so that the next OpenCode restart can load it.
     expect(client.auth.set).toHaveBeenCalledTimes(1);

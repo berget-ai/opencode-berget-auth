@@ -78,12 +78,13 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
           fetch: async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
             if (accessTokenExpired(currentAuth)) {
               logDebug('Token expired, refreshing before request...');
-              const refreshed = await refreshAccessTokenDirect(currentAuth, client);
-              if (refreshed) {
-                currentAuth = refreshed;
+              const result = await refreshAccessTokenDirect(currentAuth, client);
+              if (result.success) {
+                currentAuth = result.auth;
                 logDebug('Token refreshed successfully');
               } else {
-                logError('Token refresh failed');
+                logError('Token refresh failed', result.reason);
+                throw new Error(`Token refresh failed: ${result.reason}`);
               }
             }
 

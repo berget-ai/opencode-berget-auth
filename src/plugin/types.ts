@@ -127,6 +127,13 @@ export interface PluginInput {
 }
 
 /**
+ * Result of a token refresh attempt
+ */
+export type RefreshResult =
+  | { auth: OAuthAuthDetails; success: true }
+  | { reason: string; success: false };
+
+/**
  * Token refresh response
  */
 export interface TokenRefreshResponse {

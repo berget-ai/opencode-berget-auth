@@ -28,6 +28,10 @@ export function logDebug(message: string): void {
  */
 export function logError(message: string, error?: unknown): void {
   const timestamp = new Date().toISOString();
-  const errorDetail = error instanceof Error ? error.message : String(error);
-  console.error(`[Berget Auth ${timestamp}] ERROR: ${message}`, errorDetail);
+  if (error === undefined) {
+    console.error(`[Berget Auth ${timestamp}] ERROR: ${message}`);
+  } else {
+    const errorDetail = error instanceof Error ? error.message : String(error);
+    console.error(`[Berget Auth ${timestamp}] ERROR: ${message}`, errorDetail);
+  }
 }
