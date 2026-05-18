@@ -2,14 +2,13 @@
  * Token refresh logic for Berget OAuth
  */
 
-import type { OAuthAuthDetails, TokenRefreshResponse } from './types';
-import type { PluginInput } from './types';
+import type { OAuthAuthDetails, PluginInput, RefreshResult } from './types';
 
 import { ACCESS_TOKEN_EXPIRY_BUFFER_MS, getTokenRefreshEndpoint } from '../constants';
 import { logDebug } from './debug';
 
 // Track in-flight refresh requests to prevent duplicates
-const refreshInFlight = new Map<string, Promise<OAuthAuthDetails | undefined>>();
+const refreshInFlight = new Map<string, Promise<RefreshResult>>();
 
 /**
  * Refreshes an expired access token using the refresh token
@@ -18,12 +17,12 @@ const refreshInFlight = new Map<string, Promise<OAuthAuthDetails | undefined>>()
 export async function refreshAccessTokenDirect(
   auth: OAuthAuthDetails,
   client?: PluginInput['client'],
-): Promise<OAuthAuthDetails | undefined> {
+): Promise<RefreshResult> {
   const refreshToken = auth.refresh;
 
   if (!refreshToken) {
     logDebug('No refresh token available');
-    return undefined;
+    return { reason: 'No refresh token available', success: false };
   }
 
   // Check if refresh is already in flight
@@ -67,7 +66,7 @@ function parseErrorResponse(
 async function refreshAccessTokenInternal(
   auth: OAuthAuthDetails,
   client?: PluginInput['client'],
-): Promise<OAuthAuthDetails | undefined> {
+): Promise<RefreshResult> {
   const refreshToken = auth.refresh;
 
   logDebug('Refreshing access token');
@@ -92,19 +91,25 @@ async function refreshAccessTokenInternal(
         const errorData = parseErrorResponse(errorText);
 
         if (errorData?.error === 'invalid_grant' || errorData?.error === 'invalid_token') {
+          const reason = 'Refresh token is invalid or revoked';
           console.warn(
             '[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate.',
           );
+          return { reason, success: false };
         }
 
-        return undefined;
+        return { reason: `Token refresh failed: HTTP ${response.status}`, success: false };
       }
 
       // Other errors - might be temporary
-      return undefined;
+      return { reason: `Token refresh failed: HTTP ${response.status}`, success: false };
     }
 
-    const data = (await response.json()) as TokenRefreshResponse;
+    const data = (await response.json()) as {
+      expires_in: number;
+      refresh_token?: string;
+      token: string;
+    };
 
     logDebug(`Token refreshed, expires_in=${data.expires_in}s`);
 
@@ -135,9 +140,10 @@ async function refreshAccessTokenInternal(
       }
     }
 
-    return updatedAuth;
+    return { auth: updatedAuth, success: true };
   } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Unknown network error';
     console.error('Failed to refresh Berget access token:', error);
-    return undefined;
+    return { reason: `Network error: ${reason}`, success: false };
   }
 }
