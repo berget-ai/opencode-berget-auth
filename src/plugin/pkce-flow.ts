@@ -298,6 +298,19 @@ export function generateCodeVerifier(): string {
 }
 
 /**
+ * Sends an HTML response with cache-control headers appropriate for OAuth callbacks
+ */
+function writeHtmlResponse(response: http.ServerResponse, html: string): void {
+  response.writeHead(200, {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Content-Type': 'text/html',
+    'Expires': '0',
+    'Pragma': 'no-cache',
+  });
+  response.end(html);
+}
+
+/**
  * Handles the OAuth callback request
  */
 export async function handleCallbackRequest(
@@ -317,8 +330,7 @@ export async function handleCallbackRequest(
   if (error) {
     const displayMessage = errorDescription ? `${error}: ${errorDescription}` : error;
 
-    response.writeHead(200, { 'Content-Type': 'text/html' });
-    response.end(buildHtmlResponse(false, displayMessage));
+    writeHtmlResponse(response, buildHtmlResponse(false, displayMessage));
     server.close();
     resolve({
       error: `Authentication failed: ${displayMessage}`,
@@ -328,8 +340,7 @@ export async function handleCallbackRequest(
   }
 
   if (receivedState !== state) {
-    response.writeHead(200, { 'Content-Type': 'text/html' });
-    response.end(buildHtmlResponse(false, 'Invalid state parameter'));
+    writeHtmlResponse(response, buildHtmlResponse(false, 'Invalid state parameter'));
     server.close();
     resolve({
       error: 'Invalid state parameter. Please try again.',
@@ -339,8 +350,7 @@ export async function handleCallbackRequest(
   }
 
   if (!code) {
-    response.writeHead(200, { 'Content-Type': 'text/html' });
-    response.end(buildHtmlResponse(false, 'No authorization code received'));
+    writeHtmlResponse(response, buildHtmlResponse(false, 'No authorization code received'));
     server.close();
     resolve({
       error: 'No authorization code received.',
@@ -350,9 +360,8 @@ export async function handleCallbackRequest(
   }
 
   // Exchange code for tokens
-  response.writeHead(200, { 'Content-Type': 'text/html' });
-  response.end(buildHtmlResponse(true, 'You can close this window and return to OpenCode.'));
-  server.close();
+    writeHtmlResponse(response, buildHtmlResponse(true, 'You can close this window and return to OpenCode.'));
+    server.close();
 
   const result = await exchangeCodeForTokens(code, codeVerifier, redirectUri);
   resolve(result);

@@ -64,7 +64,7 @@ describe('handleCallbackRequest - Issue #4', () => {
 
     const mockResponse = {
       end: vi.fn(),
-      writeHead: vi.fn(),
+      writeHead: vi.fn() as unknown as http.ServerResponse['writeHead'],
     } as unknown as http.ServerResponse;
 
     const mockServer = {
@@ -103,7 +103,7 @@ describe('handleCallbackRequest - Issue #4', () => {
 
     const mockResponse = {
       end: vi.fn(),
-      writeHead: vi.fn(),
+      writeHead: vi.fn() as unknown as http.ServerResponse['writeHead'],
     } as unknown as http.ServerResponse;
 
     const mockServer = {
@@ -131,6 +131,37 @@ describe('handleCallbackRequest - Issue #4', () => {
     expect((resolvedResult as { type: string }).type).toBe('failed');
     if ((resolvedResult as { type: string }).type !== 'failed') throw new Error('expected failed');
     expect((resolvedResult as { error?: string }).error).toBe('Authentication failed: invalid_scope');
+  });
+
+  it('sets Cache-Control: no-store on error callback response', async () => {
+    const handleCallbackRequest = await loadHandleCallbackRequest();
+
+    const mockResponse = {
+      end: vi.fn(),
+      writeHead: vi.fn() as unknown as http.ServerResponse['writeHead'],
+    } as unknown as http.ServerResponse;
+
+    const mockServer = {
+      close: vi.fn(),
+    } as unknown as http.Server;
+
+    const parsedUrl = url.parse('/callback?error=access_denied', true);
+
+    await handleCallbackRequest(
+      mockResponse,
+      mockServer,
+      parsedUrl,
+      'valid-state',
+      'verifier',
+      'http://localhost:8787/callback',
+      () => {},
+    );
+
+    expect(mockResponse.writeHead).toHaveBeenCalledTimes(1);
+    const [, headers] = (mockResponse.writeHead as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(headers['Cache-Control']).toBe('no-store, no-cache, must-revalidate, proxy-revalidate');
+    expect(headers['Pragma']).toBe('no-cache');
+    expect(headers['Expires']).toBe('0');
   });
 });
 
