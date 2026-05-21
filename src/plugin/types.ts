@@ -6,27 +6,7 @@
 import type { ToolDefinition } from '@opencode-ai/plugin';
 import type { Auth, Config, createOpencodeClient, Provider } from '@opencode-ai/sdk';
 
-/**
- * Auth hook method - API key type
- */
-export interface ApiAuthMethod {
-  authorize?(): Promise<{ key: string; type: 'success' } | { type: 'failed' }>;
-  label: string;
-  type: 'api';
-}
-
 export type AuthDetails = NonOAuthAuthDetails | OAuthAuthDetails;
-
-/**
- * Auth hook for plugin
- */
-export interface AuthHook {
-  loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, unknown>>;
-  methods: AuthMethod[];
-  provider: string;
-}
-
-export type AuthMethod = ApiAuthMethod | OAuthAuthMethod;
 
 /**
  * OAuth authentication result
@@ -83,14 +63,6 @@ export interface Hooks {
 }
 
 /**
- * Non-OAuth auth details
- */
-export interface NonOAuthAuthDetails {
-  [key: string]: unknown;
-  type: string;
-}
-
-/**
  * OAuth auth details from OpenCode storage
  */
 export interface OAuthAuthDetails {
@@ -99,20 +71,6 @@ export interface OAuthAuthDetails {
   refresh: string;
   type: 'oauth';
 }
-
-/**
- * Auth hook method - OAuth type
- */
-export interface OAuthAuthMethod {
-  authorize(): Promise<AuthorizeResult>;
-  label: string;
-  type: 'oauth';
-}
-
-/**
- * Plugin function type
- */
-export type Plugin = (input: PluginInput) => Promise<Hooks>;
 
 /**
  * Plugin input from OpenCode
@@ -133,10 +91,38 @@ export type RefreshResult =
   | { reason: string; success: false };
 
 /**
- * Token refresh response
+ * Auth hook method - API key type
  */
-export interface TokenRefreshResponse {
-  expires_in: number;
-  refresh_token?: string;
-  token: string;
+interface ApiAuthMethod {
+  authorize?(): Promise<{ key: string; type: 'success' } | { type: 'failed' }>;
+  label: string;
+  type: 'api';
+}
+
+/**
+ * Auth hook for plugin
+ */
+interface AuthHook {
+  loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, unknown>>;
+  methods: AuthMethod[];
+  provider: string;
+}
+
+type AuthMethod = ApiAuthMethod | OAuthAuthMethod;
+
+/**
+ * Non-OAuth auth details
+ */
+interface NonOAuthAuthDetails {
+  [key: string]: unknown;
+  type: string;
+}
+
+/**
+ * Auth hook method - OAuth type
+ */
+interface OAuthAuthMethod {
+  authorize(): Promise<AuthorizeResult>;
+  label: string;
+  type: 'oauth';
 }

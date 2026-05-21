@@ -18,13 +18,13 @@
  */
 
 // Export the plugin function directly as default (OpenCode loads default export)
-export { BergetAuthPlugin as default } from './src/plugin';
 
-// Also export as PluginModule format for compatibility
-export { BergetAuthPlugin as server } from './src/plugin';
-
-// Named exports for backward compatibility
-export { BergetAuthPlugin, BergetOAuthPlugin } from './src/plugin';
+export {
+  BergetAuthPlugin,
+  BergetAuthPlugin as BergetOAuthPlugin,
+  BergetAuthPlugin as default,
+  BergetAuthPlugin as server,
+} from './src/plugin';
 
 // Re-export utilities that might be useful
 export { accessTokenExpired, isOAuthAuth } from './src/plugin/auth';

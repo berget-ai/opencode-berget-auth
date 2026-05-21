@@ -9,7 +9,7 @@
 export const BERGET_PROVIDER_ID = 'berget';
 
 // Runtime getters for URL configuration
-export const getApiUrl = (): string => process.env.BERGET_API_URL || 'https://api.berget.ai';
+const getApiUrl = (): string => process.env.BERGET_API_URL || 'https://api.berget.ai';
 
 export const getInferenceUrl = (): string =>
   process.env.BERGET_INFERENCE_URL || 'https://api.berget.ai/v1';

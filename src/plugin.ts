@@ -163,7 +163,3 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
     },
   };
 };
-
-// Export aliases for flexibility
-export const BergetOAuthPlugin = BergetAuthPlugin;
-export default BergetAuthPlugin;

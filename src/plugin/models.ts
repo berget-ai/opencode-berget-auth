@@ -20,22 +20,12 @@ interface ChatModelsResponse {
 }
 
 // Models that support vision/image input
-const VISION_MODELS = new Set([
-  "moonshotai/Kimi-K2.6",
-]);
+const VISION_MODELS = new Set(['moonshotai/Kimi-K2.6']);
 
 // Cache for models to avoid repeated API calls
 let cachedModels: Record<string, object> | undefined;
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Clears the model cache (useful for testing or forcing refresh)
- */
-export function clearModelCache(): void {
-  cachedModels = undefined;
-  cacheTimestamp = 0;
-}
 
 /**
  * Fetches available chat models from Berget API
