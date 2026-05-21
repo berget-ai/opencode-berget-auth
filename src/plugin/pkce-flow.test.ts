@@ -1,3 +1,6 @@
+import type { AuthOAuthResult } from './types';
+import * as http from 'node:http';
+import * as url from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../constants', () => ({
@@ -40,10 +43,97 @@ async function loadSubject() {
   return mod.createPkceAuthorizeMethod;
 }
 
+async function loadHandleCallbackRequest() {
+  const mod = await import('./pkce-flow');
+  return mod.handleCallbackRequest;
+}
+
 async function loadExchangeCodeForTokens() {
   const mod = await import('./pkce-flow');
   return mod.exchangeCodeForTokens;
 }
+
+describe('handleCallbackRequest - Issue #4', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('includes error_description in the error message when present', async () => {
+    const handleCallbackRequest = await loadHandleCallbackRequest();
+
+    const mockResponse = {
+      end: vi.fn(),
+      writeHead: vi.fn(),
+    } as unknown as http.ServerResponse;
+
+    const mockServer = {
+      close: vi.fn(),
+    } as unknown as http.Server;
+
+    const parsedUrl = url.parse(
+      '/callback?error=access_denied&error_description=User+denied+consent',
+      true,
+    );
+
+    let resolvedResult: AuthOAuthResult | undefined;
+
+    await handleCallbackRequest(
+      mockResponse,
+      mockServer,
+      parsedUrl,
+      'valid-state',
+      'verifier',
+      'http://localhost:8787/callback',
+      (value) => {
+        resolvedResult = value as unknown as AuthOAuthResult;
+      },
+    );
+
+    expect(resolvedResult).toBeDefined();
+    if (typeof resolvedResult !== 'object' || resolvedResult === null) throw new Error('expected object');
+    expect((resolvedResult as { type: string }).type).toBe('failed');
+    if ((resolvedResult as { type: string }).type !== 'failed') throw new Error('expected failed');
+    expect((resolvedResult as { error?: string }).error).toContain('access_denied');
+    expect((resolvedResult as { error?: string }).error).toContain('User denied consent');
+  });
+
+  it('falls back to error code alone when error_description is absent', async () => {
+    const handleCallbackRequest = await loadHandleCallbackRequest();
+
+    const mockResponse = {
+      end: vi.fn(),
+      writeHead: vi.fn(),
+    } as unknown as http.ServerResponse;
+
+    const mockServer = {
+      close: vi.fn(),
+    } as unknown as http.Server;
+
+    const parsedUrl = url.parse('/callback?error=invalid_scope', true);
+
+    let resolvedResult: AuthOAuthResult | undefined;
+
+    await handleCallbackRequest(
+      mockResponse,
+      mockServer,
+      parsedUrl,
+      'valid-state',
+      'verifier',
+      'http://localhost:8787/callback',
+      (value) => {
+        resolvedResult = value as unknown as AuthOAuthResult;
+      },
+    );
+
+    expect(resolvedResult).toBeDefined();
+    if (typeof resolvedResult !== 'object' || resolvedResult === null) throw new Error('expected object');
+    expect((resolvedResult as { type: string }).type).toBe('failed');
+    if ((resolvedResult as { type: string }).type !== 'failed') throw new Error('expected failed');
+    expect((resolvedResult as { error?: string }).error).toBe('Authentication failed: invalid_scope');
+  });
+});
+
 
 describe('createPkceAuthorizeMethod - Issue #1', () => {
   beforeEach(() => {

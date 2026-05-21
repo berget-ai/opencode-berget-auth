@@ -290,7 +290,7 @@ function generateCodeVerifier(): string {
 /**
  * Handles the OAuth callback request
  */
-async function handleCallbackRequest(
+export async function handleCallbackRequest(
   response: http.ServerResponse,
   server: http.Server,
   parsedUrl: url.UrlWithParsedQuery,
@@ -302,13 +302,16 @@ async function handleCallbackRequest(
   const receivedState = parsedUrl.query.state as string;
   const code = parsedUrl.query.code as string;
   const error = parsedUrl.query.error as string;
+  const errorDescription = parsedUrl.query.error_description as string | undefined;
 
   if (error) {
+    const displayMessage = errorDescription ? `${error}: ${errorDescription}` : error;
+
     response.writeHead(200, { 'Content-Type': 'text/html' });
-    response.end(buildHtmlResponse(false, error));
+    response.end(buildHtmlResponse(false, displayMessage));
     server.close();
     resolve({
-      error: `Authentication failed: ${error}`,
+      error: `Authentication failed: ${displayMessage}`,
       type: 'failed',
     });
     return;
