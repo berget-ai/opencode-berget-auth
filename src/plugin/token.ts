@@ -66,6 +66,7 @@ function parseErrorResponse(
 async function refreshAccessTokenInternal(
   auth: OAuthAuthDetails,
   client?: PluginInput['client'],
+  attempt = 1,
 ): Promise<RefreshResult> {
   const refreshToken = auth.refresh;
 
@@ -85,6 +86,14 @@ async function refreshAccessTokenInternal(
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
       logDebug(`Token refresh failed: ${response.status} ${errorText}`);
+
+      // Retry transient 5xx errors (up to 2 attempts total)
+      if (response.status >= 500 && attempt <= 2) {
+        const delay = attempt === 1 ? 500 : 1500;
+        logDebug(`Refresh got HTTP ${response.status}, retrying in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return refreshAccessTokenInternal(auth, client, attempt + 1);
+      }
 
       // Handle revoked/invalid refresh token
       if (response.status === 401 || response.status === 400) {

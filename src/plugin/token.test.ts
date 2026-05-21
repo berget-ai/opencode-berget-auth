@@ -475,4 +475,97 @@ describe('refreshAccessTokenDirect', () => {
     if (result.success) throw new Error('result should be failure');
     expect(result.reason).toBe('Invalid token response from refresh endpoint');
   });
+
+  // Issue #7 regression: retry on transient 5xx
+  it('retries once on 503 and succeeds on second attempt', async () => {
+    let callCount = 0;
+
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          text: async () => 'Service Unavailable',
+        } as Response);
+      }
+      return Promise.resolve({
+        json: async () => ({ expires_in: 3600, token: 'retried-token' }),
+        ok: true,
+      } as Response);
+    }));
+
+    const auth: OAuthAuthDetails = {
+      access: 'old',
+      expires: Date.now() - 1000,
+      refresh: 'refresh-token-retry',
+      type: 'oauth',
+    };
+
+    const start = Date.now();
+    const result = await refreshAccessTokenDirect(auth);
+    const elapsed = Date.now() - start;
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error('result should be success');
+    expect(result.auth.access).toBe('retried-token');
+    // Should have taken at least one retry delay (~500ms)
+    expect(elapsed).toBeGreaterThanOrEqual(400);
+  });
+
+  it('gives up after two consecutive 503 failures', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => 'Service Unavailable',
+      } as Response),
+    );
+
+    const auth: OAuthAuthDetails = {
+      access: 'old',
+      expires: Date.now() - 1000,
+      refresh: 'refresh-token-double-fail',
+      type: 'oauth',
+    };
+
+    const start = Date.now();
+    const result = await refreshAccessTokenDirect(auth);
+    const elapsed = Date.now() - start;
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toContain('503');
+    // Should have taken two retry delays (~500 + ~1500 = ~2000ms)
+    expect(elapsed).toBeGreaterThanOrEqual(1500);
+  });
+
+  it('does not retry on 401 (client error)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({ error: 'invalid_token' }),
+      } as Response),
+    );
+
+    const auth: OAuthAuthDetails = {
+      access: 'old',
+      expires: Date.now() - 1000,
+      refresh: 'refresh-token-no-retry',
+      type: 'oauth',
+    };
+
+    const start = Date.now();
+    const result = await refreshAccessTokenDirect(auth);
+    const elapsed = Date.now() - start;
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('Refresh token is invalid or revoked');
+    // Should not have waited for retry
+    expect(elapsed).toBeLessThan(200);
+  });
 });
