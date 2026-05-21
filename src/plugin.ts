@@ -23,6 +23,25 @@ import { createPkceAuthorizeMethod } from './plugin/pkce-flow';
 import { refreshAccessTokenDirect } from './plugin/token';
 
 /**
+ * Wraps a native fetch call while preserving headers from both Request
+ * objects and init, then injecting (or overwriting) Authorization.
+ */
+async function fetchWithAuth(
+  authToken: string,
+  input: Request | string | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const request =
+    input instanceof Request
+      ? new Request(input, init)
+      : new Request(input.toString(), init);
+
+  const headers = new Headers(request.headers);
+  headers.set('Authorization', `Bearer ${authToken}`);
+  return fetch(request, { headers });
+}
+
+/**
  * Main plugin export - Berget OAuth Plugin for OpenCode
  *
  * This plugin:
@@ -56,11 +75,7 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
               fetch: async (
                 input: Request | string | URL,
                 init?: RequestInit,
-              ): Promise<Response> => {
-                const headers = new Headers(init?.headers);
-                headers.set('Authorization', `Bearer ${apiKey}`);
-                return fetch(input, { ...init, headers });
-              },
+              ): Promise<Response> => fetchWithAuth(apiKey, input, init),
             };
           }
           return {};
@@ -88,15 +103,7 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
               }
             }
 
-            const headers = new Headers(init?.headers);
-            if (currentAuth.access) {
-              headers.set('Authorization', `Bearer ${currentAuth.access}`);
-            }
-
-            return fetch(input, {
-              ...init,
-              headers,
-            });
+            return fetchWithAuth(currentAuth.access || '', input, init);
           },
         };
       },
