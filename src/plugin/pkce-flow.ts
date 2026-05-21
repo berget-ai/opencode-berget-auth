@@ -15,7 +15,6 @@ import * as url from 'node:url';
 import type { AuthOAuthResult, AuthorizeResult } from './types';
 
 import {
-  ACCESS_TOKEN_EXPIRY_BUFFER_MS,
   getKeycloakRealm,
   getKeycloakUrl,
   KEYCLOAK_CLIENT_ID,
@@ -213,7 +212,7 @@ export async function exchangeCodeForTokens(
     };
   }
 
-  const expires = Date.now() + tokenData.expires_in * 1000 - ACCESS_TOKEN_EXPIRY_BUFFER_MS;
+  const expires = Date.now() + tokenData.expires_in * 1000;
 
   logDebug('Successfully obtained tokens via PKCE');
 

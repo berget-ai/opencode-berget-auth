@@ -77,7 +77,9 @@ describe('refreshAccessTokenDirect', () => {
     if (!result.success) throw new Error('result should be success');
     expect(result.auth.access).toBe(newToken);
     expect(result.auth.refresh).toBe('refresh-token-1');
-    expect(result.auth.expires).toBeGreaterThan(Date.now());
+    // Issue #5: stored expiry must be the raw timestamp, NOT pre-reduced by buffer
+    expect(result.auth.expires).toBeGreaterThanOrEqual(Date.now() + expiresIn * 1000 - 2_000);
+    expect(result.auth.expires).toBeLessThanOrEqual(Date.now() + expiresIn * 1000 + 2_000);
 
     expect(client.auth.set).toHaveBeenCalledTimes(1);
     expect(client.auth.set).toHaveBeenCalledWith({

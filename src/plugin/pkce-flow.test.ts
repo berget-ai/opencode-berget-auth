@@ -191,7 +191,9 @@ describe('exchangeCodeForTokens - Issue #3', () => {
       throw new Error('expected success with access token');
     }
     expect(result.access).toBe('access-123');
-    expect(typeof result.expires).toBe('number');
+    // Issue #5: stored expiry must be the raw timestamp, NOT pre-reduced by buffer
+    expect(result.expires).toBeGreaterThanOrEqual(Date.now() + 300_000 - 2_000);
+    expect(result.expires).toBeLessThanOrEqual(Date.now() + 300_000 + 2_000);
     expect(result.refresh).toBe('refresh-456');
   });
 
