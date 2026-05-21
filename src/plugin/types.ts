@@ -34,7 +34,6 @@ export type AuthMethod = ApiAuthMethod | OAuthAuthMethod;
 export type AuthOAuthResult =
   | {
       access: string;
-      accountId?: string;
       expires: number;
       provider?: string;
       refresh: string;
