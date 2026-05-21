@@ -4,10 +4,10 @@ This document describes the complete authentication architecture for the Berget 
 
 The plugin implements **dual-authentication support** within the OpenCode plugin framework:
 
-| Method | Flow | Token Lifecycle | Typical User |
-|--------|------|-----------------|--------------|
+| Method             | Flow                             | Token Lifecycle                | Typical User                         |
+| ------------------ | -------------------------------- | ------------------------------ | ------------------------------------ |
 | **OAuth 2.0 PKCE** | Browser-based login via Keycloak | Automatic refresh indefinitely | Team members with a Berget Code seat |
-| **API Key** | Paste key manually | Static, no refresh cycle | Standalone API key users |
+| **API Key**        | Paste key manually               | Static, no refresh cycle       | Standalone API key users             |
 
 ---
 
@@ -60,7 +60,7 @@ return {
     if (accessTokenExpired(currentAuth)) {
       const result = await refreshAccessTokenDirect(currentAuth, client);
       if (result.success) {
-        currentAuth = result.auth;  // In-place update
+        currentAuth = result.auth; // In-place update
       }
     }
     // Inject currentAuth.access into request headers while preserving
@@ -108,16 +108,16 @@ sequenceDiagram
 
 ### Key Implementation Notes
 
-| Step | Detail |
-|------|--------|
-| **Code Verifier** | 32 random bytes, generated via `crypto.webcrypto.getRandomValues` for forward-compatibility with Node 18+, base64url-encoded. Challenge = SHA-256(verifier), base64url-encoded. |
-| **Callback Server** | Created and destroyed per-login attempt. Listens on `127.0.0.1:8787` (loopback interface only), never on `0.0.0.0`. |
-| **Timeout** | 5-minute hard timeout; server auto-closes and resolves with failure. |
-| **State Validation** | Prevents CSRF by comparing the `state` nonce returned in the callback against the one generated in `authorize()`. |
-| **Port Conflict** | If port 8787 is in use, the server fails immediately with a descriptive error. |
-| **Error Display** | OAuth error callbacks include both `error` and `error_description` in the HTML page and resolved message. |
-| **Cache Headers** | Callback HTML responses include `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate` to prevent caching of sensitive one-time codes. |
-| **Headless Detection** | Detects `SSH_CONNECTION`, `SSH_CLIENT`, `SSH_TTY`, `OPENCODE_HEADLESS`, or `CI` env vars. Still attempts PKCE but warns the user that a browser is required. |
+| Step                   | Detail                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Code Verifier**      | 32 random bytes, generated via `crypto.webcrypto.getRandomValues` for forward-compatibility with Node 18+, base64url-encoded. Challenge = SHA-256(verifier), base64url-encoded. |
+| **Callback Server**    | Created and destroyed per-login attempt. Listens on `127.0.0.1:8787` (loopback interface only), never on `0.0.0.0`.                                                             |
+| **Timeout**            | 5-minute hard timeout; server auto-closes and resolves with failure.                                                                                                            |
+| **State Validation**   | Prevents CSRF by comparing the `state` nonce returned in the callback against the one generated in `authorize()`.                                                               |
+| **Port Conflict**      | If port 8787 is in use, the server fails immediately with a descriptive error.                                                                                                  |
+| **Error Display**      | OAuth error callbacks include both `error` and `error_description` in the HTML page and resolved message.                                                                       |
+| **Cache Headers**      | Callback HTML responses include `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate` to prevent caching of sensitive one-time codes.                          |
+| **Headless Detection** | Detects `SSH_CONNECTION`, `SSH_CLIENT`, `SSH_TTY`, `OPENCODE_HEADLESS`, or `CI` env vars. Still attempts PKCE but warns the user that a browser is required.                    |
 
 ---
 
@@ -160,7 +160,7 @@ function accessTokenExpired(auth: OAuthAuthDetails): boolean {
 }
 ```
 
-This prevents edge cases where a token expires *during* a slow request or between the check and the actual network call.
+This prevents edge cases where a token expires _during_ a slow request or between the check and the actual network call.
 
 ### Expiry Timing Detail
 
@@ -168,13 +168,14 @@ The stored expiry is the **raw timestamp** (`Date.now() + expires_in * 1000`). T
 
 ```typescript
 // When saving tokens after login or refresh:
-expires = Date.now() + (data.expires_in * 1000); // RAW — no buffer subtracted
+expires = Date.now() + data.expires_in * 1000; // RAW — no buffer subtracted
 
 // When checking at request time:
 return auth.expires <= Date.now() + 60_000; // true when <= 60s of raw expiry remains
 ```
 
 For a 300-second (`5 min`) token:
+
 - **Old behavior (double buffer):** refreshed after ~180s (40% waste).
 - **New behavior (single buffer):** refreshed after ~240s (industry-standard 60s buffer).
 
@@ -240,14 +241,74 @@ sequenceDiagram
     RF->>R2: Resolve shared promise
 ```
 
-### Behavior
+### Cross-Process Token Races
 
-| Scenario | Behavior |
-|----------|----------|
-| **Single request, token expired** | Initiates refresh, awaits result, proceeds. |
-| **Multiple concurrent requests, same refresh token** | All wait on the **same** `Promise`. Only **one** HTTP call to `/v1/auth/refresh`. After resolution, all requests proceed with the new token. |
-| **Refresh token rotation** | On success, the old key is deleted from the Map. Future requests with the new rotated token start fresh. |
-| **Scope** | Per-`node` process. Each OpenCode process has its own module-level `refreshInFlight` Map. |
+Because OpenCode stores credentials on disk through an opaque local server, there are **no guarantees** about atomic writes or file locking when multiple terminals run simultaneously. Two `opencode` processes can interact with the same stored refresh token:
+
+#### Scenario: Another Process Refreshes First
+
+| Timeline | Process A                                  | Process B                    |
+| -------- | ------------------------------------------ | ---------------------------- |
+| t0       | Token expires, `currentAuth` is stale      | —                            |
+| t1       | `refreshAccessTokenDirect()` in flight     | Token also expires           |
+| t2       | B refreshes first, persists new token      | `client.auth.set()` succeeds |
+| t3       | Refresh request returns `invalid_grant`    | Continues with fresh token   |
+| t4       | Detects `invalid_grant`, reloads from disk | —                            |
+| t5       | Finds B's persisted token, recovers        | —                            |
+
+The plugin defends against this in **two layers**:
+
+**1. Cache-busting `getAuth()` read before refresh:**
+
+Before initiating an HTTP refresh in the `fetch` wrapper, the plugin asks the framework for the latest auth from disk:
+
+```typescript
+if (accessTokenExpired(currentAuth)) {
+  const diskAuth = await getAuth();
+  if (isOAuthAuth(diskAuth) && !accessTokenExpired(diskAuth)) {
+    currentAuth = diskAuth;        // Adopt fresher token
+    return fetchWithAuth(...);     // Skip HTTP refresh entirely
+  }
+  // Still expired — proceed with HTTP refresh
+  const result = await refreshAccessTokenDirect(currentAuth, client, getAuth);
+}
+```
+
+If another process has refreshed and persisted a valid token, the current process **adopts it immediately** without a network round-trip.
+
+**2. `invalid_grant` / `invalid_token` recovery via disk reload:**
+
+If the refresh token has already been consumed by another process, the current process receives `invalid_grant` or `invalid_token` from the refresh endpoint. Before failing:
+
+```typescript
+if (errorData?.error === 'invalid_grant' || errorData?.error === 'invalid_token') {
+  if (getAuth) {
+    try {
+      const diskAuth = await getAuth();
+      if (isOAuthAuth(diskAuth) && !accessTokenExpired(diskAuth)) {
+        logDebug('Recovered from invalid_grant: valid token found on disk');
+        return { auth: diskAuth, success: true };
+      }
+    } catch {
+      // Fall through to standard failure
+    }
+  }
+  return { reason: 'Refresh token is invalid or revoked', success: false };
+}
+```
+
+This recovers gracefully when another process wins the refresh race. The `getAuth()` call is wrapped in `try/catch` to ensure a storage failure is not fatal.
+
+### Login Port Singleton Limitation
+
+The PKCE callback server binds to port `8787` on `127.0.0.1`. Because the port is hard-coded, **only one concurrent login attempt** can run on the same machine:
+
+```
+Port 8787 is already in use. Another OpenCode login may be in progress.
+Please wait and try again, or close other OpenCode sessions.
+```
+
+This is by design — the port must match the `redirect_uri` registered with Keycloak. To log in from a second terminal, the first terminal must either complete or abort its login attempt. The error message explicitly tells the user about the concurrent-login explanation.
 
 ---
 
@@ -272,11 +333,11 @@ No expiry detection, no refresh logic, no callback server. The key is valid unti
 
 If the refresh endpoint returns a **5xx-class** error (e.g. `503 Service Unavailable`), the retry logic in `token.ts` performs up to **2 retry attempts** with exponential backoff:
 
-| Attempt | Delay | Strategy |
-|---------|-------|----------|
-| 1st failure | 500ms | Immediate retry. |
-| 2nd failure | 1500ms | One more retry. |
-| 3rd failure | — | Return failure to caller. |
+| Attempt     | Delay  | Strategy                  |
+| ----------- | ------ | ------------------------- |
+| 1st failure | 500ms  | Immediate retry.          |
+| 2nd failure | 1500ms | One more retry.           |
+| 3rd failure | —      | Return failure to caller. |
 
 4xx client errors (e.g. `400`, `401`) are **not retried** — they are deterministic failures.
 
@@ -345,11 +406,11 @@ Before persisting refreshed tokens, the plugin checks that `access` is truthy an
 
 The plugin derives its endpoints from environment variables at runtime, allowing easy switching between production, staging, and local development without code changes.
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `BERGET_API_URL` | `https://api.berget.ai` | Base URL for API calls and token refresh |
-| `BERGET_INFERENCE_URL` | `https://api.berget.ai/v1` | Chat completions endpoint base |
-| `OPENCODE_HEADLESS` | — | Detected to warn about missing browser |
+| Variable               | Default                    | Purpose                                  |
+| ---------------------- | -------------------------- | ---------------------------------------- |
+| `BERGET_API_URL`       | `https://api.berget.ai`    | Base URL for API calls and token refresh |
+| `BERGET_INFERENCE_URL` | `https://api.berget.ai/v1` | Chat completions endpoint base           |
+| `OPENCODE_HEADLESS`    | —                          | Detected to warn about missing browser   |
 
 ### Keycloak URL Derivation
 
