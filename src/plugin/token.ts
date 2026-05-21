@@ -2,9 +2,12 @@
  * Token refresh logic for Berget OAuth
  */
 
+import type { Auth } from '@opencode-ai/sdk';
+
 import type { OAuthAuthDetails, PluginInput, RefreshResult } from './types';
 
 import { getTokenRefreshEndpoint } from '../constants';
+import { accessTokenExpired, isOAuthAuth } from './auth';
 import { logDebug } from './debug';
 
 // Track in-flight refresh requests to prevent duplicates
@@ -17,6 +20,7 @@ const refreshInFlight = new Map<string, Promise<RefreshResult>>();
 export async function refreshAccessTokenDirect(
   auth: OAuthAuthDetails,
   client?: PluginInput['client'],
+  getAuth?: () => Promise<Auth>,
 ): Promise<RefreshResult> {
   const refreshToken = auth.refresh;
 
@@ -33,7 +37,7 @@ export async function refreshAccessTokenDirect(
   }
 
   // Start refresh and track the promise
-  const refreshPromise = refreshAccessTokenInternal(auth, client);
+  const refreshPromise = refreshAccessTokenInternal(auth, client, getAuth);
   refreshInFlight.set(refreshToken, refreshPromise);
 
   try {
@@ -41,6 +45,88 @@ export async function refreshAccessTokenDirect(
   } finally {
     refreshInFlight.delete(refreshToken);
   }
+}
+
+/**
+ * Parses a successful token refresh JSON response into a RefreshResult.
+ */
+function buildRefreshResult(
+  data: Record<string, unknown>,
+  auth: OAuthAuthDetails,
+  client?: PluginInput['client'],
+): RefreshResult {
+  if (typeof data.token !== 'string' || typeof data.expires_in !== 'number') {
+    logDebug('Refresh endpoint returned malformed body');
+    return {
+      reason: 'Invalid token response from refresh endpoint',
+      success: false,
+    };
+  }
+
+  logDebug(`Token refreshed, expires_in=${data.expires_in}s`);
+
+  // Build updated auth
+  const updatedAuth: OAuthAuthDetails = {
+    ...auth,
+    access: data.token,
+    expires: Date.now() + data.expires_in * 1000,
+    refresh: typeof data.refresh_token === 'string' ? data.refresh_token : auth.refresh, // Use new refresh token if rotated
+  };
+
+  // Persist updated tokens to OpenCode so they survive restarts
+  if (client) {
+    persistRefreshedToken(client, updatedAuth).catch(() => {
+      // Already logged inside persistRefreshedToken
+    });
+  }
+
+  return { auth: updatedAuth, success: true };
+}
+
+/**
+ * Handles the HTTP error response from the token refresh endpoint.
+ * Decides whether to retry (5xx), recover from disk (invalid_grant), or fail.
+ */
+async function handleErrorResponse(
+  response: Response,
+  errorText: string,
+  attempt: number,
+  auth: OAuthAuthDetails,
+  client: PluginInput['client'] | undefined,
+  getAuth: (() => Promise<Auth>) | undefined,
+): Promise<RefreshResult> {
+  // Retry transient 5xx errors (up to 2 attempts total)
+  if (response.status >= 500 && attempt <= 2) {
+    const delay = attempt === 1 ? 500 : 1500;
+    logDebug(`Refresh got HTTP ${response.status}, retrying in ${delay}ms...`);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    return refreshAccessTokenInternal(auth, client, getAuth, attempt + 1);
+  }
+
+  // Handle revoked/invalid refresh token
+  if (response.status === 401 || response.status === 400) {
+    const errorData = parseErrorResponse(errorText);
+
+    if (errorData?.error === 'invalid_grant' || errorData?.error === 'invalid_token') {
+      // Try reloading from disk before failing - another process may have refreshed
+      const recovered = getAuth ? await tryRecoverFromDisk(getAuth) : undefined;
+      if (recovered) {
+        logDebug('Recovered from invalid_grant: valid token found on disk');
+        return { auth: recovered, success: true };
+      }
+
+      const reason = 'Refresh token is invalid or revoked';
+      console.warn(
+        '[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate.',
+      );
+      return { reason, success: false };
+    }
+
+    return { reason: `Token refresh failed: HTTP ${response.status}`, success: false };
+  }
+
+  // Other errors - might be temporary
+  return { reason: `Token refresh failed: HTTP ${response.status}`, success: false };
 }
 
 /**
@@ -61,21 +147,48 @@ function parseErrorResponse(
 }
 
 /**
+ * Persists refreshed tokens to OpenCode client.
+ */
+async function persistRefreshedToken(
+  client: PluginInput['client'],
+  updatedAuth: OAuthAuthDetails,
+): Promise<void> {
+  if (!updatedAuth.access || typeof updatedAuth.expires !== 'number') {
+    return;
+  }
+
+  try {
+    await client.auth.set({
+      body: {
+        access: updatedAuth.access,
+        expires: updatedAuth.expires,
+        refresh: updatedAuth.refresh,
+        type: 'oauth',
+      },
+      path: { id: 'berget' },
+    });
+    logDebug('Token refresh persisted to OpenCode');
+  } catch (error) {
+    // Non-fatal: in-memory token still works for this session
+    console.warn('[Berget Auth] Failed to persist token refresh:', error);
+  }
+}
+
+/**
  * Internal implementation of token refresh
  */
 async function refreshAccessTokenInternal(
   auth: OAuthAuthDetails,
   client?: PluginInput['client'],
+  getAuth?: () => Promise<Auth>,
   attempt = 1,
 ): Promise<RefreshResult> {
-  const refreshToken = auth.refresh;
-
   logDebug('Refreshing access token');
 
   try {
     const response = await fetch(getTokenRefreshEndpoint(), {
       body: JSON.stringify({
-        refresh_token: refreshToken,
+        refresh_token: auth.refresh,
       }),
       headers: {
         'Content-Type': 'application/json',
@@ -86,77 +199,36 @@ async function refreshAccessTokenInternal(
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
       logDebug(`Token refresh failed: ${response.status} ${errorText}`);
-
-      // Retry transient 5xx errors (up to 2 attempts total)
-      if (response.status >= 500 && attempt <= 2) {
-        const delay = attempt === 1 ? 500 : 1500;
-        logDebug(`Refresh got HTTP ${response.status}, retrying in ${delay}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        return refreshAccessTokenInternal(auth, client, attempt + 1);
-      }
-
-      // Handle revoked/invalid refresh token
-      if (response.status === 401 || response.status === 400) {
-        const errorData = parseErrorResponse(errorText);
-
-        if (errorData?.error === 'invalid_grant' || errorData?.error === 'invalid_token') {
-          const reason = 'Refresh token is invalid or revoked';
-          console.warn(
-            '[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate.',
-          );
-          return { reason, success: false };
-        }
-
-        return { reason: `Token refresh failed: HTTP ${response.status}`, success: false };
-      }
-
-      // Other errors - might be temporary
-      return { reason: `Token refresh failed: HTTP ${response.status}`, success: false };
+      return handleErrorResponse(response, errorText, attempt, auth, client, getAuth);
     }
 
     const data = (await response.json()) as Record<string, unknown>;
-
-    if (typeof data.token !== 'string' || typeof data.expires_in !== 'number') {
-      logDebug('Refresh endpoint returned malformed body');
-      return {
-        success: false,
-        reason: 'Invalid token response from refresh endpoint',
-      };
-    }
-
-    logDebug(`Token refreshed, expires_in=${data.expires_in}s`);
-
-    // Build updated auth
-    const updatedAuth: OAuthAuthDetails = {
-      ...auth,
-      access: data.token,
-      expires: Date.now() + data.expires_in * 1000,
-      refresh: typeof data.refresh_token === 'string' ? data.refresh_token : refreshToken, // Use new refresh token if rotated
-    };
-
-    // Persist updated tokens to OpenCode so they survive restarts
-    if (client && updatedAuth.access && typeof updatedAuth.expires === 'number') {
-      try {
-        await client.auth.set({
-          body: {
-            access: updatedAuth.access,
-            expires: updatedAuth.expires,
-            refresh: updatedAuth.refresh,
-            type: 'oauth',
-          },
-          path: { id: 'berget' },
-        });
-        logDebug('Token refresh persisted to OpenCode');
-      } catch (error) {
-        // Non-fatal: in-memory token still works for this session
-        console.warn('[Berget Auth] Failed to persist token refresh:', error);
-      }
-    }
-
-    return { auth: updatedAuth, success: true };
+    return buildRefreshResult(data, auth, client);
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'Unknown network error';
     console.error('Failed to refresh Berget access token:', error);
     return { reason: `Network error: ${reason}`, success: false };
   }
+}
+
+/**
+ * Attempts to recover from invalid_grant/invalid_token by reloading auth from disk.
+ * Returns the disk auth if valid and non-expired, otherwise undefined.
+ */
+async function tryRecoverFromDisk(
+  getAuth: () => Promise<Auth>,
+): Promise<OAuthAuthDetails | undefined> {
+  try {
+    const diskAuth = await getAuth();
+    if (
+      isOAuthAuth(diskAuth) &&
+      diskAuth.access &&
+      !accessTokenExpired(diskAuth as unknown as OAuthAuthDetails)
+    ) {
+      return diskAuth as unknown as OAuthAuthDetails;
+    }
+  } catch {
+    // Fall through — no recovery possible
+  }
+  return undefined;
 }

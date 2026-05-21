@@ -314,4 +314,146 @@ describe('BergetAuthPlugin loader', () => {
       'Token refresh failed: Network error: DNS lookup failed',
     );
   });
+
+  it('adopts fresher token from disk and skips HTTP refresh', async () => {
+    const client = createMockClient();
+    const plugin = await BergetAuthPlugin({ client } as PluginInput);
+    const loader = plugin.auth && plugin.auth.loader;
+
+    expect(loader).toBeDefined();
+
+    const expiredAuth: OAuthAuthDetails = {
+      access: 'expired-token',
+      expires: Date.now() - 1000,
+      refresh: 'valid-refresh-token',
+      type: 'oauth',
+    };
+
+    const freshAuth: OAuthAuthDetails = {
+      access: 'disk-fresh-token',
+      expires: Date.now() + 3600 * 1000,
+      refresh: 'valid-refresh-token',
+      type: 'oauth',
+    };
+
+    // First call returns expired, second call (inside fetch) returns fresh
+    const getAuth = vi
+      .fn()
+      .mockResolvedValueOnce(expiredAuth)
+      .mockResolvedValueOnce(freshAuth) as unknown as () => Promise<Auth>;
+
+    const result = await (loader as NonNullable<typeof loader>)(getAuth, {
+      id: 'berget',
+    } as unknown as Provider);
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response('OK'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    const response = await (result.fetch as FetchLike)('https://api.berget.ai/v1/chat');
+
+    expect(getAuth).toHaveBeenCalledTimes(2);
+    // refresh endpoint should NOT have been called
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, requestInit] = mockFetch.mock.calls[0];
+    const headers = new Headers((requestInit as RequestInit | undefined)?.headers);
+    expect(headers.get('Authorization')).toBe('Bearer disk-fresh-token');
+    expect(response.status).toBe(200);
+  });
+
+  it('proceeds with refresh when disk token is also expired', async () => {
+    const client = createMockClient();
+    const plugin = await BergetAuthPlugin({ client } as PluginInput);
+    const loader = plugin.auth && plugin.auth.loader;
+
+    expect(loader).toBeDefined();
+
+    const expiredAuth: OAuthAuthDetails = {
+      access: 'expired-token',
+      expires: Date.now() - 1000,
+      refresh: 'valid-refresh-token',
+      type: 'oauth',
+    };
+
+    // Both calls return expired
+    const getAuth = vi.fn().mockResolvedValue(expiredAuth) as unknown as () => Promise<Auth>;
+
+    const result = await (loader as NonNullable<typeof loader>)(getAuth, {
+      id: 'berget',
+    } as unknown as Provider);
+
+    // Mock the token refresh endpoint
+    const refreshFetch = vi.fn().mockResolvedValue({
+      json: async () => ({ expires_in: 3600, token: 'new-token' }),
+      ok: true,
+    } as Response);
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response('OK'));
+    vi.stubGlobal('fetch', (...arguments_: [FetchArgument, init?: RequestInit]) => {
+      const url = arguments_[0];
+      if (typeof url === 'string' && url.includes('/v1/auth/refresh')) {
+        return refreshFetch(...arguments_);
+      }
+      return mockFetch(...arguments_);
+    });
+
+    const response = await (result.fetch as FetchLike)('https://api.berget.ai/v1/chat');
+
+    expect(getAuth).toHaveBeenCalledTimes(2); // initial + cache-busting check
+    expect(refreshFetch).toHaveBeenCalledTimes(1); // refresh was triggered
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, requestInit] = mockFetch.mock.calls[0];
+    const headers = new Headers((requestInit as RequestInit | undefined)?.headers);
+    expect(headers.get('Authorization')).toBe('Bearer new-token');
+    expect(response.status).toBe(200);
+  });
+
+  it('falls back to refresh when getAuth throws during check', async () => {
+    const client = createMockClient();
+    const plugin = await BergetAuthPlugin({ client } as PluginInput);
+    const loader = plugin.auth && plugin.auth.loader;
+
+    expect(loader).toBeDefined();
+
+    const expiredAuth: OAuthAuthDetails = {
+      access: 'expired-token',
+      expires: Date.now() - 1000,
+      refresh: 'valid-refresh-token',
+      type: 'oauth',
+    };
+
+    // First call returns expired, second call throws
+    const getAuth = vi
+      .fn()
+      .mockResolvedValueOnce(expiredAuth)
+      .mockRejectedValueOnce(new Error('Storage read error')) as unknown as () => Promise<Auth>;
+
+    const result = await (loader as NonNullable<typeof loader>)(getAuth, {
+      id: 'berget',
+    } as unknown as Provider);
+
+    // Mock the token refresh endpoint
+    const refreshFetch = vi.fn().mockResolvedValue({
+      json: async () => ({ expires_in: 3600, token: 'new-token' }),
+      ok: true,
+    } as Response);
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response('OK'));
+    vi.stubGlobal('fetch', (...arguments_: [FetchArgument, init?: RequestInit]) => {
+      const url = arguments_[0];
+      if (typeof url === 'string' && url.includes('/v1/auth/refresh')) {
+        return refreshFetch(...arguments_);
+      }
+      return mockFetch(...arguments_);
+    });
+
+    const response = await (result.fetch as FetchLike)('https://api.berget.ai/v1/chat');
+
+    expect(getAuth).toHaveBeenCalledTimes(2);
+    expect(refreshFetch).toHaveBeenCalledTimes(1); // refresh was triggered despite getAuth throwing
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, requestInit] = mockFetch.mock.calls[0];
+    const headers = new Headers((requestInit as RequestInit | undefined)?.headers);
+    expect(headers.get('Authorization')).toBe('Bearer new-token');
+    expect(response.status).toBe(200);
+  });
 });

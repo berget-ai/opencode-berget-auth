@@ -33,6 +33,136 @@ export function createPkceAuthorizeMethod(): (
 }
 
 /**
+ * Exchanges authorization code for tokens
+ */
+export async function exchangeCodeForTokens(
+  code: string,
+  codeVerifier: string,
+  redirectUri: string,
+): Promise<AuthOAuthResult> {
+  const tokenUrl = `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/token`;
+
+  logDebug(`Exchanging code for tokens at ${tokenUrl}`);
+
+  const response = await fetch(tokenUrl, {
+    body: new URLSearchParams({
+      client_id: KEYCLOAK_CLIENT_ID,
+      code,
+      code_verifier: codeVerifier,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    }).toString(),
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logDebug(`Token exchange failed: ${errorText}`);
+    return {
+      error: `Failed to exchange code for tokens: ${errorText}`,
+      type: 'failed',
+    };
+  }
+
+  const tokenData = (await response.json()) as Record<string, unknown>;
+
+  if (
+    typeof tokenData.access_token !== 'string' ||
+    typeof tokenData.expires_in !== 'number' ||
+    typeof tokenData.refresh_token !== 'string'
+  ) {
+    logDebug('Token exchange returned malformed body');
+    return {
+      error: 'Invalid token response from authorization server',
+      type: 'failed',
+    };
+  }
+
+  const expires = Date.now() + tokenData.expires_in * 1000;
+
+  logDebug('Successfully obtained tokens via PKCE');
+
+  return {
+    access: tokenData.access_token,
+    expires,
+    refresh: tokenData.refresh_token,
+    type: 'success',
+  };
+}
+
+/**
+ * Generate a random string for PKCE code_verifier
+ */
+export function generateCodeVerifier(): string {
+  const bytes = new Uint8Array(32);
+  crypto.webcrypto.getRandomValues(bytes);
+  return Buffer.from(bytes).toString('base64url');
+}
+
+/**
+ * Handles the OAuth callback request
+ */
+export async function handleCallbackRequest(
+  response: http.ServerResponse,
+  server: http.Server,
+  parsedUrl: url.UrlWithParsedQuery,
+  state: string,
+  codeVerifier: string,
+  redirectUri: string,
+  resolve: (value: AuthOAuthResult | PromiseLike<AuthOAuthResult>) => void,
+): Promise<void> {
+  const receivedState = parsedUrl.query.state as string;
+  const code = parsedUrl.query.code as string;
+  const error = parsedUrl.query.error as string;
+  const errorDescription = parsedUrl.query.error_description as string | undefined;
+
+  if (error) {
+    const displayMessage = errorDescription ? `${error}: ${errorDescription}` : error;
+
+    writeHtmlResponse(response, buildHtmlResponse(false, displayMessage));
+    server.close();
+    resolve({
+      error: `Authentication failed: ${displayMessage}`,
+      type: 'failed',
+    });
+    return;
+  }
+
+  if (receivedState !== state) {
+    writeHtmlResponse(response, buildHtmlResponse(false, 'Invalid state parameter'));
+    server.close();
+    resolve({
+      error: 'Invalid state parameter. Please try again.',
+      type: 'failed',
+    });
+    return;
+  }
+
+  if (!code) {
+    writeHtmlResponse(response, buildHtmlResponse(false, 'No authorization code received'));
+    server.close();
+    resolve({
+      error: 'No authorization code received.',
+      type: 'failed',
+    });
+    return;
+  }
+
+  // Exchange code for tokens
+  writeHtmlResponse(
+    response,
+    buildHtmlResponse(true, 'You can close this window and return to OpenCode.'),
+  );
+  server.close();
+
+  const result = await exchangeCodeForTokens(code, codeVerifier, redirectUri);
+  resolve(result);
+}
+
+/**
  * Builds the HTML response for the callback page
  */
 function buildHtmlResponse(success: boolean, message: string): string {
@@ -163,67 +293,6 @@ function createCallbackServerPromise(
   });
 }
 
-/**
- * Exchanges authorization code for tokens
- */
-export async function exchangeCodeForTokens(
-  code: string,
-  codeVerifier: string,
-  redirectUri: string,
-): Promise<AuthOAuthResult> {
-  const tokenUrl = `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/token`;
-
-  logDebug(`Exchanging code for tokens at ${tokenUrl}`);
-
-  const response = await fetch(tokenUrl, {
-    body: new URLSearchParams({
-      client_id: KEYCLOAK_CLIENT_ID,
-      code,
-      code_verifier: codeVerifier,
-      grant_type: 'authorization_code',
-      redirect_uri: redirectUri,
-    }).toString(),
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    method: 'POST',
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    logDebug(`Token exchange failed: ${errorText}`);
-    return {
-      error: `Failed to exchange code for tokens: ${errorText}`,
-      type: 'failed',
-    };
-  }
-
-  const tokenData = (await response.json()) as Record<string, unknown>;
-
-  if (
-    typeof tokenData.access_token !== 'string' ||
-    typeof tokenData.expires_in !== 'number' ||
-    typeof tokenData.refresh_token !== 'string'
-  ) {
-    logDebug('Token exchange returned malformed body');
-    return {
-      error: 'Invalid token response from authorization server',
-      type: 'failed',
-    };
-  }
-
-  const expires = Date.now() + tokenData.expires_in * 1000;
-
-  logDebug('Successfully obtained tokens via PKCE');
-
-  return {
-    access: tokenData.access_token,
-    expires,
-    refresh: tokenData.refresh_token,
-    type: 'success',
-  };
-}
-
 async function executePkceAuthorization(
   _inputs?: Record<string, string>,
 ): Promise<AuthorizeResult> {
@@ -289,85 +358,6 @@ function generateRandomHex(byteLength: number): string {
 }
 
 /**
- * Generate a random string for PKCE code_verifier
- */
-export function generateCodeVerifier(): string {
-  const bytes = new Uint8Array(32);
-  crypto.webcrypto.getRandomValues(bytes);
-  return Buffer.from(bytes).toString('base64url');
-}
-
-/**
- * Sends an HTML response with cache-control headers appropriate for OAuth callbacks
- */
-function writeHtmlResponse(response: http.ServerResponse, html: string): void {
-  response.writeHead(200, {
-    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-    'Content-Type': 'text/html',
-    'Expires': '0',
-    'Pragma': 'no-cache',
-  });
-  response.end(html);
-}
-
-/**
- * Handles the OAuth callback request
- */
-export async function handleCallbackRequest(
-  response: http.ServerResponse,
-  server: http.Server,
-  parsedUrl: url.UrlWithParsedQuery,
-  state: string,
-  codeVerifier: string,
-  redirectUri: string,
-  resolve: (value: AuthOAuthResult | PromiseLike<AuthOAuthResult>) => void,
-): Promise<void> {
-  const receivedState = parsedUrl.query.state as string;
-  const code = parsedUrl.query.code as string;
-  const error = parsedUrl.query.error as string;
-  const errorDescription = parsedUrl.query.error_description as string | undefined;
-
-  if (error) {
-    const displayMessage = errorDescription ? `${error}: ${errorDescription}` : error;
-
-    writeHtmlResponse(response, buildHtmlResponse(false, displayMessage));
-    server.close();
-    resolve({
-      error: `Authentication failed: ${displayMessage}`,
-      type: 'failed',
-    });
-    return;
-  }
-
-  if (receivedState !== state) {
-    writeHtmlResponse(response, buildHtmlResponse(false, 'Invalid state parameter'));
-    server.close();
-    resolve({
-      error: 'Invalid state parameter. Please try again.',
-      type: 'failed',
-    });
-    return;
-  }
-
-  if (!code) {
-    writeHtmlResponse(response, buildHtmlResponse(false, 'No authorization code received'));
-    server.close();
-    resolve({
-      error: 'No authorization code received.',
-      type: 'failed',
-    });
-    return;
-  }
-
-  // Exchange code for tokens
-    writeHtmlResponse(response, buildHtmlResponse(true, 'You can close this window and return to OpenCode.'));
-    server.close();
-
-  const result = await exchangeCodeForTokens(code, codeVerifier, redirectUri);
-  resolve(result);
-}
-
-/**
  * Handles server startup errors
  */
 function handleServerError(
@@ -377,7 +367,7 @@ function handleServerError(
   if (error.code === 'EADDRINUSE') {
     logDebug(`Port ${PKCE_CALLBACK_PORT} is already in use`);
     resolve({
-      error: `Port ${PKCE_CALLBACK_PORT} is already in use. Please close other applications using this port.`,
+      error: `Port ${PKCE_CALLBACK_PORT} is already in use. Another OpenCode login may be in progress. Please wait and try again, or close other OpenCode sessions.`,
       type: 'failed',
     });
     return;
@@ -433,4 +423,17 @@ function openBrowserUrl(urlString: string): void {
   } catch (error) {
     logDebug(`Failed to open browser: ${error}`);
   }
+}
+
+/**
+ * Sends an HTML response with cache-control headers appropriate for OAuth callbacks
+ */
+function writeHtmlResponse(response: http.ServerResponse, html: string): void {
+  response.writeHead(200, {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Content-Type': 'text/html',
+    Expires: '0',
+    Pragma: 'no-cache',
+  });
+  response.end(html);
 }
