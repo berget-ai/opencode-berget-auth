@@ -22,19 +22,19 @@ import { fetchBergetModels } from './plugin/models';
 import { createPkceAuthorizeMethod } from './plugin/pkce-flow';
 import { refreshAccessTokenDirect } from './plugin/token';
 
+type FetchInput = Request | string | URL;
+
 /**
  * Wraps a native fetch call while preserving headers from both Request
  * objects and init, then injecting (or overwriting) Authorization.
  */
 async function fetchWithAuth(
   authToken: string,
-  input: Request | string | URL,
+  input: FetchInput,
   init?: RequestInit,
 ): Promise<Response> {
   const request =
-    input instanceof Request
-      ? new Request(input, init)
-      : new Request(input.toString(), init);
+    input instanceof Request ? new Request(input, init) : new Request(input.toString(), init);
 
   const headers = new Headers(request.headers);
   headers.set('Authorization', `Bearer ${authToken}`);
@@ -72,10 +72,8 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
             const apiKey = apiAuth.key;
             return {
               apiKey,
-              fetch: async (
-                input: Request | string | URL,
-                init?: RequestInit,
-              ): Promise<Response> => fetchWithAuth(apiKey, input, init),
+              fetch: async (input: Request | string | URL, init?: RequestInit): Promise<Response> =>
+                fetchWithAuth(apiKey, input, init),
             };
           }
           return {};
@@ -92,8 +90,29 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
           apiKey: currentAuth.access || '',
           fetch: async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
             if (accessTokenExpired(currentAuth)) {
+              // Cache-busting: another process may have refreshed and persisted
+              // a fresher token. Ask the framework for the latest auth before
+              // initiating an HTTP refresh.
+              logDebug('Token expired, checking disk for fresher token...');
+              try {
+                const diskAuth = await getAuth();
+                if (isOAuthAuth(diskAuth as OAuthAuthDetails)) {
+                  const diskOAuth = diskAuth as OAuthAuthDetails;
+                  if (!accessTokenExpired(diskOAuth)) {
+                    currentAuth = diskOAuth;
+                    logDebug('Adopted fresher token from disk, skipping HTTP refresh');
+                    return fetchWithAuth(currentAuth.access || '', input, init);
+                  }
+                  logDebug('Disk token is also expired, proceeding with HTTP refresh');
+                }
+              } catch (error) {
+                logDebug(
+                  `getAuth() failed during cache-busting check: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              }
+
               logDebug('Token expired, refreshing before request...');
-              const result = await refreshAccessTokenDirect(currentAuth, client);
+              const result = await refreshAccessTokenDirect(currentAuth, client, getAuth);
               if (result.success) {
                 currentAuth = result.auth;
                 logDebug('Token refreshed successfully');

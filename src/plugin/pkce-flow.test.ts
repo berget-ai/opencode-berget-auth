@@ -1,7 +1,8 @@
-import type { AuthOAuthResult } from './types';
 import * as http from 'node:http';
 import * as url from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { AuthOAuthResult } from './types';
 
 vi.mock('../constants', () => ({
   ACCESS_TOKEN_EXPIRY_BUFFER_MS: 60_000,
@@ -16,19 +17,31 @@ vi.mock('./debug', () => ({
 }));
 
 // Capture what arguments are passed to server.listen()
-let capturedListenArgs: unknown[] | undefined;
+let capturedListenArguments: undefined | unknown[];
+let shouldEmitEADDRINUSE = false;
 
 vi.mock('node:http', async () => {
   const actual = await vi.importActual<typeof import('node:http')>('node:http');
 
   return {
     ...actual,
-    createServer: (...args: Parameters<typeof actual.createServer>) => {
-      const server = actual.createServer(...args);
+    createServer: (...arguments_: Parameters<typeof actual.createServer>) => {
+      const server = actual.createServer(...arguments_);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      server.listen = (...listenArgs: any[]) => {
-        capturedListenArgs = listenArgs;
+      server.listen = (...listenArguments: any[]) => {
+        capturedListenArguments = listenArguments;
+        if (shouldEmitEADDRINUSE) {
+          setImmediate(() => {
+            const error = Object.assign(
+              new Error('address already in use') as NodeJS.ErrnoException,
+              {
+                code: 'EADDRINUSE',
+              },
+            );
+            server.emit('error', error);
+          });
+        }
         return server;
       };
 
@@ -37,20 +50,20 @@ vi.mock('node:http', async () => {
   };
 });
 
-// Dynamic import so the mocks apply before the subject module is loaded
-async function loadSubject() {
-  const mod = await import('./pkce-flow');
-  return mod.createPkceAuthorizeMethod;
+async function loadExchangeCodeForTokens() {
+  const module_ = await import('./pkce-flow');
+  return module_.exchangeCodeForTokens;
 }
 
 async function loadHandleCallbackRequest() {
-  const mod = await import('./pkce-flow');
-  return mod.handleCallbackRequest;
+  const module_ = await import('./pkce-flow');
+  return module_.handleCallbackRequest;
 }
 
-async function loadExchangeCodeForTokens() {
-  const mod = await import('./pkce-flow');
-  return mod.exchangeCodeForTokens;
+// Dynamic import so the mocks apply before the subject module is loaded
+async function loadSubject() {
+  const module_ = await import('./pkce-flow');
+  return module_.createPkceAuthorizeMethod;
 }
 
 describe('handleCallbackRequest - Issue #4', () => {
@@ -91,7 +104,9 @@ describe('handleCallbackRequest - Issue #4', () => {
     );
 
     expect(resolvedResult).toBeDefined();
-    if (typeof resolvedResult !== 'object' || resolvedResult === null) throw new Error('expected object');
+    // eslint-disable-next-line sonarjs/different-types-comparison
+    if (typeof resolvedResult !== 'object' || resolvedResult === null)
+      throw new Error('expected object');
     expect((resolvedResult as { type: string }).type).toBe('failed');
     if ((resolvedResult as { type: string }).type !== 'failed') throw new Error('expected failed');
     expect((resolvedResult as { error?: string }).error).toContain('access_denied');
@@ -127,10 +142,14 @@ describe('handleCallbackRequest - Issue #4', () => {
     );
 
     expect(resolvedResult).toBeDefined();
-    if (typeof resolvedResult !== 'object' || resolvedResult === null) throw new Error('expected object');
+    // eslint-disable-next-line sonarjs/different-types-comparison
+    if (typeof resolvedResult !== 'object' || resolvedResult === null)
+      throw new Error('expected object');
     expect((resolvedResult as { type: string }).type).toBe('failed');
     if ((resolvedResult as { type: string }).type !== 'failed') throw new Error('expected failed');
-    expect((resolvedResult as { error?: string }).error).toBe('Authentication failed: invalid_scope');
+    expect((resolvedResult as { error?: string }).error).toBe(
+      'Authentication failed: invalid_scope',
+    );
   });
 
   it('sets Cache-Control: no-store on error callback response', async () => {
@@ -158,18 +177,19 @@ describe('handleCallbackRequest - Issue #4', () => {
     );
 
     expect(mockResponse.writeHead).toHaveBeenCalledTimes(1);
-    const [, headers] = (mockResponse.writeHead as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [, headers] = (mockResponse.writeHead as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0];
     expect(headers['Cache-Control']).toBe('no-store, no-cache, must-revalidate, proxy-revalidate');
     expect(headers['Pragma']).toBe('no-cache');
     expect(headers['Expires']).toBe('0');
   });
 });
 
-
 describe('createPkceAuthorizeMethod - Issue #1', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    capturedListenArgs = undefined;
+    capturedListenArguments = undefined;
+    shouldEmitEADDRINUSE = false;
     delete process.env.CI;
     delete process.env.SSH_CONNECTION;
   });
@@ -186,12 +206,31 @@ describe('createPkceAuthorizeMethod - Issue #1', () => {
     const callbackPromise = (result.callback as any)();
     callbackPromise.catch(() => {}); // ignore — we only care about listen args
 
-    expect(capturedListenArgs).toBeDefined();
-    expect(capturedListenArgs).toHaveLength(3); // port, hostname, callback
-    if (!capturedListenArgs) throw new Error('capturedListenArgs should be defined');
-    expect(capturedListenArgs[0]).toBe(8787);
-    expect(capturedListenArgs[1]).toBe('127.0.0.1');
-    expect(typeof capturedListenArgs[2]).toBe('function');
+    expect(capturedListenArguments).toBeDefined();
+    expect(capturedListenArguments).toHaveLength(3); // port, hostname, callback
+    if (!capturedListenArguments) throw new Error('capturedListenArgs should be defined');
+    expect(capturedListenArguments[0]).toBe(8787);
+    expect(capturedListenArguments[1]).toBe('127.0.0.1');
+    expect(typeof capturedListenArguments[2]).toBe('function');
+  });
+
+  it('returns clear EADDRINUSE error when another login is in progress', async () => {
+    process.env.CI = 'true';
+    shouldEmitEADDRINUSE = true;
+
+    const createPkceAuthorizeMethod = await loadSubject();
+    const authorize = createPkceAuthorizeMethod();
+    const result = await authorize();
+
+    // Trigger server creation — it will emit EADDRINUSE synchronously in listen()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const callbackResult = await (result.callback as any)();
+
+    expect(callbackResult.type).toBe('failed');
+    if (callbackResult.type !== 'failed') throw new Error('expected failed');
+    expect(callbackResult.error).toBe(
+      'Port 8787 is already in use. Another OpenCode login may be in progress. Please wait and try again, or close other OpenCode sessions.',
+    );
   });
 });
 
@@ -215,7 +254,11 @@ describe('exchangeCodeForTokens - Issue #3', () => {
     );
 
     const exchangeCodeForTokens = await loadExchangeCodeForTokens();
-    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+    const result = await exchangeCodeForTokens(
+      'code',
+      'verifier',
+      'http://localhost:8787/callback',
+    );
 
     expect(result.type).toBe('success');
     if (result.type !== 'success' || !('access' in result)) {
@@ -223,8 +266,8 @@ describe('exchangeCodeForTokens - Issue #3', () => {
     }
     expect(result.access).toBe('access-123');
     // Issue #5: stored expiry must be the raw timestamp, NOT pre-reduced by buffer
-    expect(result.expires).toBeGreaterThanOrEqual(Date.now() + 300_000 - 2_000);
-    expect(result.expires).toBeLessThanOrEqual(Date.now() + 300_000 + 2_000);
+    expect(result.expires).toBeGreaterThanOrEqual(Date.now() + 300_000 - 2000);
+    expect(result.expires).toBeLessThanOrEqual(Date.now() + 300_000 + 2000);
     expect(result.refresh).toBe('refresh-456');
   });
 
@@ -238,7 +281,11 @@ describe('exchangeCodeForTokens - Issue #3', () => {
     );
 
     const exchangeCodeForTokens = await loadExchangeCodeForTokens();
-    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+    const result = await exchangeCodeForTokens(
+      'code',
+      'verifier',
+      'http://localhost:8787/callback',
+    );
 
     expect(result.type).toBe('failed');
     if (result.type !== 'failed') throw new Error('expected failed');
@@ -259,7 +306,11 @@ describe('exchangeCodeForTokens - Issue #3', () => {
     );
 
     const exchangeCodeForTokens = await loadExchangeCodeForTokens();
-    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+    const result = await exchangeCodeForTokens(
+      'code',
+      'verifier',
+      'http://localhost:8787/callback',
+    );
 
     expect(result.type).toBe('failed');
     if (result.type !== 'failed') throw new Error('expected failed');
@@ -275,7 +326,11 @@ describe('exchangeCodeForTokens - Issue #3', () => {
     );
 
     const exchangeCodeForTokens = await loadExchangeCodeForTokens();
-    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+    const result = await exchangeCodeForTokens(
+      'code',
+      'verifier',
+      'http://localhost:8787/callback',
+    );
 
     expect(result.type).toBe('failed');
     if (result.type !== 'failed') throw new Error('expected failed');
@@ -291,7 +346,11 @@ describe('exchangeCodeForTokens - Issue #3', () => {
     );
 
     const exchangeCodeForTokens = await loadExchangeCodeForTokens();
-    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+    const result = await exchangeCodeForTokens(
+      'code',
+      'verifier',
+      'http://localhost:8787/callback',
+    );
 
     expect(result.type).toBe('failed');
     if (result.type !== 'failed') throw new Error('expected failed');
@@ -300,8 +359,8 @@ describe('exchangeCodeForTokens - Issue #3', () => {
 
 describe('generateCodeVerifier - Issue #10', () => {
   it('produces a base64url string of the correct length (32 bytes => 43 chars)', async () => {
-    const mod = await import('./pkce-flow');
-    const verifier = mod.generateCodeVerifier();
+    const module_ = await import('./pkce-flow');
+    const verifier = module_.generateCodeVerifier();
 
     expect(typeof verifier).toBe('string');
     expect(verifier.length).toBe(43); // ceil(32 / 3) * 4 = 43 with base64url padding stripped

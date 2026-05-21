@@ -34,3 +34,6 @@ npm-debug.log*
 
 # Husky
 .husky/_
+
+# Local review artifacts
+TODO.md

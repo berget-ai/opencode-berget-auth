@@ -78,8 +78,8 @@ describe('refreshAccessTokenDirect', () => {
     expect(result.auth.access).toBe(newToken);
     expect(result.auth.refresh).toBe('refresh-token-1');
     // Issue #5: stored expiry must be the raw timestamp, NOT pre-reduced by buffer
-    expect(result.auth.expires).toBeGreaterThanOrEqual(Date.now() + expiresIn * 1000 - 2_000);
-    expect(result.auth.expires).toBeLessThanOrEqual(Date.now() + expiresIn * 1000 + 2_000);
+    expect(result.auth.expires).toBeGreaterThanOrEqual(Date.now() + expiresIn * 1000 - 2000);
+    expect(result.auth.expires).toBeLessThanOrEqual(Date.now() + expiresIn * 1000 + 2000);
 
     expect(client.auth.set).toHaveBeenCalledTimes(1);
     expect(client.auth.set).toHaveBeenCalledWith({
@@ -480,20 +480,23 @@ describe('refreshAccessTokenDirect', () => {
   it('retries once on 503 and succeeds on second attempt', async () => {
     let callCount = 0;
 
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            ok: false,
+            status: 503,
+            text: async () => 'Service Unavailable',
+          } as Response);
+        }
         return Promise.resolve({
-          ok: false,
-          status: 503,
-          text: async () => 'Service Unavailable',
+          json: async () => ({ expires_in: 3600, token: 'retried-token' }),
+          ok: true,
         } as Response);
-      }
-      return Promise.resolve({
-        json: async () => ({ expires_in: 3600, token: 'retried-token' }),
-        ok: true,
-      } as Response);
-    }));
+      }),
+    );
 
     const auth: OAuthAuthDetails = {
       access: 'old',
@@ -541,31 +544,109 @@ describe('refreshAccessTokenDirect', () => {
     expect(elapsed).toBeGreaterThanOrEqual(1500);
   });
 
-  it('does not retry on 401 (client error)', async () => {
+  it('recovers from invalid_grant when disk has a valid token', async () => {
+    const { warnSpy } = suppressConsole();
+
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: false,
-        status: 401,
-        text: async () => JSON.stringify({ error: 'invalid_token' }),
+        status: 400,
+        text: async () => JSON.stringify({ error: 'invalid_grant' }),
       } as Response),
     );
+
+    const diskAuth: OAuthAuthDetails = {
+      access: 'disk-fresh-token',
+      expires: Date.now() + 3600 * 1000,
+      refresh: 'disk-refresh-token',
+      type: 'oauth',
+    };
+
+    const getAuth = vi.fn().mockResolvedValue(diskAuth);
 
     const auth: OAuthAuthDetails = {
       access: 'old',
       expires: Date.now() - 1000,
-      refresh: 'refresh-token-no-retry',
+      refresh: 'refresh-token-recover-valid',
       type: 'oauth',
     };
 
-    const start = Date.now();
-    const result = await refreshAccessTokenDirect(auth);
-    const elapsed = Date.now() - start;
+    const result = await refreshAccessTokenDirect(auth, undefined, getAuth);
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error('result should be success');
+    expect(result.auth.access).toBe('disk-fresh-token');
+    expect(getAuth).toHaveBeenCalledTimes(1);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('fails on invalid_grant when disk auth is also expired', async () => {
+    const { warnSpy } = suppressConsole();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: 'invalid_grant' }),
+      } as Response),
+    );
+
+    const diskAuth: OAuthAuthDetails = {
+      access: 'disk-expired-token',
+      expires: Date.now() - 1000,
+      refresh: 'disk-refresh-token',
+      type: 'oauth',
+    };
+
+    const getAuth = vi.fn().mockResolvedValue(diskAuth);
+
+    const auth: OAuthAuthDetails = {
+      access: 'old',
+      expires: Date.now() - 1000,
+      refresh: 'refresh-token-recover-expired',
+      type: 'oauth',
+    };
+
+    const result = await refreshAccessTokenDirect(auth, undefined, getAuth);
 
     expect(result.success).toBe(false);
     if (result.success) throw new Error('result should be failure');
     expect(result.reason).toBe('Refresh token is invalid or revoked');
-    // Should not have waited for retry
-    expect(elapsed).toBeLessThan(200);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate.',
+    );
+  });
+
+  it('fails on invalid_grant when getAuth throws', async () => {
+    const { warnSpy } = suppressConsole();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: 'invalid_grant' }),
+      } as Response),
+    );
+
+    const getAuth = vi.fn().mockRejectedValue(new Error('Storage read error'));
+
+    const auth: OAuthAuthDetails = {
+      access: 'old',
+      expires: Date.now() - 1000,
+      refresh: 'refresh-token-recover-throw',
+      type: 'oauth',
+    };
+
+    const result = await refreshAccessTokenDirect(auth, undefined, getAuth);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('Refresh token is invalid or revoked');
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Berget Auth] Refresh token is invalid or revoked. Please run `opencode auth login` to reauthenticate.',
+    );
   });
 });
