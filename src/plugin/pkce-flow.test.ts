@@ -266,3 +266,15 @@ describe('exchangeCodeForTokens - Issue #3', () => {
     if (result.type !== 'failed') throw new Error('expected failed');
   });
 });
+
+describe('generateCodeVerifier - Issue #10', () => {
+  it('produces a base64url string of the correct length (32 bytes => 43 chars)', async () => {
+    const mod = await import('./pkce-flow');
+    const verifier = mod.generateCodeVerifier();
+
+    expect(typeof verifier).toBe('string');
+    expect(verifier.length).toBe(43); // ceil(32 / 3) * 4 = 43 with base64url padding stripped
+    // base64url characters only
+    expect(verifier).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+});
