@@ -146,8 +146,8 @@ function createCallbackServerPromise(
       handleServerError(error, resolve);
     });
 
-    server.listen(PKCE_CALLBACK_PORT, () => {
-      logDebug(`Callback server listening on port ${PKCE_CALLBACK_PORT}`);
+    server.listen(PKCE_CALLBACK_PORT, '127.0.0.1', () => {
+      logDebug(`Callback server listening on 127.0.0.1:${PKCE_CALLBACK_PORT}`);
     });
 
     // Timeout after 5 minutes
