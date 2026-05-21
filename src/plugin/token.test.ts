@@ -405,4 +405,74 @@ describe('refreshAccessTokenDirect', () => {
       path: { id: 'berget' },
     });
   });
+
+  // Issue #12 regression: unchecked type assertion after token refresh
+  it('returns failure when refresh response is missing token', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ expires_in: 3600 }),
+        ok: true,
+      } as Response),
+    );
+
+    const auth: OAuthAuthDetails = {
+      access: 'old',
+      expires: Date.now() - 1000,
+      refresh: 'refresh-token-malformed',
+      type: 'oauth',
+    };
+
+    const result = await refreshAccessTokenDirect(auth);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('Invalid token response from refresh endpoint');
+  });
+
+  it('returns failure when refresh response expires_in is not a number', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ expires_in: 'not-a-number', token: 'new-token' }),
+        ok: true,
+      } as Response),
+    );
+
+    const auth: OAuthAuthDetails = {
+      access: 'old',
+      expires: Date.now() - 1000,
+      refresh: 'refresh-token-wrong-type',
+      type: 'oauth',
+    };
+
+    const result = await refreshAccessTokenDirect(auth);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('Invalid token response from refresh endpoint');
+  });
+
+  it('returns failure for a proxy error wrapped in 200 OK on refresh', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ error: 'rate_limited' }),
+        ok: true,
+      } as Response),
+    );
+
+    const auth: OAuthAuthDetails = {
+      access: 'old',
+      expires: Date.now() - 1000,
+      refresh: 'refresh-token-proxy-error',
+      type: 'oauth',
+    };
+
+    const result = await refreshAccessTokenDirect(auth);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('result should be failure');
+    expect(result.reason).toBe('Invalid token response from refresh endpoint');
+  });
 });

@@ -105,11 +105,15 @@ async function refreshAccessTokenInternal(
       return { reason: `Token refresh failed: HTTP ${response.status}`, success: false };
     }
 
-    const data = (await response.json()) as {
-      expires_in: number;
-      refresh_token?: string;
-      token: string;
-    };
+    const data = (await response.json()) as Record<string, unknown>;
+
+    if (typeof data.token !== 'string' || typeof data.expires_in !== 'number') {
+      logDebug('Refresh endpoint returned malformed body');
+      return {
+        success: false,
+        reason: 'Invalid token response from refresh endpoint',
+      };
+    }
 
     logDebug(`Token refreshed, expires_in=${data.expires_in}s`);
 
@@ -118,7 +122,7 @@ async function refreshAccessTokenInternal(
       ...auth,
       access: data.token,
       expires: Date.now() + data.expires_in * 1000,
-      refresh: data.refresh_token || refreshToken, // Use new refresh token if rotated
+      refresh: typeof data.refresh_token === 'string' ? data.refresh_token : refreshToken, // Use new refresh token if rotated
     };
 
     // Persist updated tokens to OpenCode so they survive restarts
