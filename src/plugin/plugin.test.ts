@@ -72,6 +72,41 @@ describe('BergetAuthPlugin loader', () => {
     expect(response.status).toBe(200);
   });
 
+  // Issue #2 regression: Request object headers must NOT be dropped
+  it('preserves Request object headers in API key auth fetch', async () => {
+    const client = createMockClient();
+    const plugin = await BergetAuthPlugin({ client } as PluginInput);
+    const loader = plugin.auth && plugin.auth.loader;
+
+    expect(loader).toBeDefined();
+
+    const getAuth = vi.fn().mockResolvedValue({
+      key: 'sk-berget-test-key',
+      type: 'api',
+    }) as unknown as () => Promise<Auth>;
+
+    const result = await (loader as NonNullable<typeof loader>)(getAuth, {
+      id: 'berget',
+    } as unknown as Provider);
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response('OK'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    // Pass a Request object carrying headers but no init argument
+    const request = new Request('https://api.berget.ai/v1/chat', {
+      headers: { 'Content-Type': 'application/json', 'X-Request-ID': 'abc-123' },
+    });
+
+    await (result.fetch as FetchLike)(request);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockFetch.mock.calls[0];
+    const headers = new Headers((init as RequestInit | undefined)?.headers);
+    expect(headers.get('Authorization')).toBe('Bearer sk-berget-test-key');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.get('X-Request-ID')).toBe('abc-123');
+  });
+
   it('returns empty object when auth is not OAuth and has no key', async () => {
     const client = createMockClient();
     const plugin = await BergetAuthPlugin({ client } as PluginInput);
@@ -118,6 +153,45 @@ describe('BergetAuthPlugin loader', () => {
     const headers = new Headers((init as RequestInit | undefined)?.headers);
     expect(headers.get('Authorization')).toBe('Bearer valid-token');
     expect(response.status).toBe(200);
+  });
+
+  // Issue #2 regression: Request object headers must NOT be dropped in OAuth path
+  it('preserves Request object headers in OAuth auth fetch', async () => {
+    const client = createMockClient();
+    const plugin = await BergetAuthPlugin({ client } as PluginInput);
+    const loader = plugin.auth && plugin.auth.loader;
+
+    expect(loader).toBeDefined();
+
+    const auth: OAuthAuthDetails = {
+      access: 'valid-token',
+      expires: Date.now() + 3600 * 1000, // Far in the future
+      refresh: 'refresh-token',
+      type: 'oauth',
+    };
+
+    const getAuth = vi.fn().mockResolvedValue(auth) as unknown as () => Promise<Auth>;
+
+    const result = await (loader as NonNullable<typeof loader>)(getAuth, {
+      id: 'berget',
+    } as unknown as Provider);
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response('OK'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    // Pass a Request object carrying headers but no init argument
+    const request = new Request('https://api.berget.ai/v1/chat', {
+      headers: { 'Content-Type': 'application/json', 'X-Request-ID': 'abc-456' },
+    });
+
+    await (result.fetch as FetchLike)(request);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockFetch.mock.calls[0];
+    const headers = new Headers((init as RequestInit | undefined)?.headers);
+    expect(headers.get('Authorization')).toBe('Bearer valid-token');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.get('X-Request-ID')).toBe('abc-456');
   });
 
   it('refreshes expired token and proceeds with new token on success', async () => {
