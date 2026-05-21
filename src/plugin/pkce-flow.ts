@@ -167,7 +167,7 @@ function createCallbackServerPromise(
 /**
  * Exchanges authorization code for tokens
  */
-async function exchangeCodeForTokens(
+export async function exchangeCodeForTokens(
   code: string,
   codeVerifier: string,
   redirectUri: string,
@@ -199,11 +199,19 @@ async function exchangeCodeForTokens(
     };
   }
 
-  const tokenData = (await response.json()) as {
-    access_token: string;
-    expires_in: number;
-    refresh_token: string;
-  };
+  const tokenData = (await response.json()) as Record<string, unknown>;
+
+  if (
+    typeof tokenData.access_token !== 'string' ||
+    typeof tokenData.expires_in !== 'number' ||
+    typeof tokenData.refresh_token !== 'string'
+  ) {
+    logDebug('Token exchange returned malformed body');
+    return {
+      error: 'Invalid token response from authorization server',
+      type: 'failed',
+    };
+  }
 
   const expires = Date.now() + tokenData.expires_in * 1000 - ACCESS_TOKEN_EXPIRY_BUFFER_MS;
 

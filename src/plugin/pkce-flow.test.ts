@@ -40,6 +40,11 @@ async function loadSubject() {
   return mod.createPkceAuthorizeMethod;
 }
 
+async function loadExchangeCodeForTokens() {
+  const mod = await import('./pkce-flow');
+  return mod.exchangeCodeForTokens;
+}
+
 describe('createPkceAuthorizeMethod - Issue #1', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -66,5 +71,106 @@ describe('createPkceAuthorizeMethod - Issue #1', () => {
     expect(capturedListenArgs[0]).toBe(8787);
     expect(capturedListenArgs[1]).toBe('127.0.0.1');
     expect(typeof capturedListenArgs[2]).toBe('function');
+  });
+});
+
+describe('exchangeCodeForTokens - Issue #3', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('returns success for a valid token response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({
+          access_token: 'access-123',
+          expires_in: 300,
+          refresh_token: 'refresh-456',
+        }),
+        ok: true,
+      } as Response),
+    );
+
+    const exchangeCodeForTokens = await loadExchangeCodeForTokens();
+    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+
+    expect(result.type).toBe('success');
+    if (result.type !== 'success' || !('access' in result)) {
+      throw new Error('expected success with access token');
+    }
+    expect(result.access).toBe('access-123');
+    expect(typeof result.expires).toBe('number');
+    expect(result.refresh).toBe('refresh-456');
+  });
+
+  it('returns failure when access_token is missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ expires_in: 300, refresh_token: 'refresh-456' }),
+        ok: true,
+      } as Response),
+    );
+
+    const exchangeCodeForTokens = await loadExchangeCodeForTokens();
+    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+
+    expect(result.type).toBe('failed');
+    if (result.type !== 'failed') throw new Error('expected failed');
+    expect(result.error).toBe('Invalid token response from authorization server');
+  });
+
+  it('returns failure when expires_in is not a number', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({
+          access_token: 'access-123',
+          expires_in: 'not-a-number',
+          refresh_token: 'refresh-456',
+        }),
+        ok: true,
+      } as Response),
+    );
+
+    const exchangeCodeForTokens = await loadExchangeCodeForTokens();
+    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+
+    expect(result.type).toBe('failed');
+    if (result.type !== 'failed') throw new Error('expected failed');
+  });
+
+  it('returns failure when refresh_token is missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ access_token: 'access-123', expires_in: 300 }),
+        ok: true,
+      } as Response),
+    );
+
+    const exchangeCodeForTokens = await loadExchangeCodeForTokens();
+    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+
+    expect(result.type).toBe('failed');
+    if (result.type !== 'failed') throw new Error('expected failed');
+  });
+
+  it('returns failure for a proxy error wrapped in 200 OK', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ error: 'rate_limited' }),
+        ok: true,
+      } as Response),
+    );
+
+    const exchangeCodeForTokens = await loadExchangeCodeForTokens();
+    const result = await exchangeCodeForTokens('code', 'verifier', 'http://localhost:8787/callback');
+
+    expect(result.type).toBe('failed');
+    if (result.type !== 'failed') throw new Error('expected failed');
   });
 });
