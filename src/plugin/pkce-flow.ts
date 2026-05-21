@@ -238,7 +238,7 @@ async function executePkceAuthorization(
   // Generate PKCE parameters
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);
-  const state = crypto.randomBytes(16).toString('hex');
+  const state = generateRandomHex(16);
   const redirectUri = `http://localhost:${PKCE_CALLBACK_PORT}/callback`;
 
   // Build authorization URL
@@ -280,10 +280,21 @@ function generateCodeChallenge(verifier: string): string {
 }
 
 /**
+ * Generate a random hex string using Web Crypto (non-blocking, idiomatic in Node 18+)
+ */
+function generateRandomHex(byteLength: number): string {
+  const bytes = new Uint8Array(byteLength);
+  crypto.webcrypto.getRandomValues(bytes);
+  return Buffer.from(bytes).toString('hex');
+}
+
+/**
  * Generate a random string for PKCE code_verifier
  */
-function generateCodeVerifier(): string {
-  return crypto.randomBytes(32).toString('base64url');
+export function generateCodeVerifier(): string {
+  const bytes = new Uint8Array(32);
+  crypto.webcrypto.getRandomValues(bytes);
+  return Buffer.from(bytes).toString('base64url');
 }
 
 /**
