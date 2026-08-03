@@ -20,9 +20,7 @@ interface ChatModelsResponse {
 }
 
 // Models that support vision/image input
-const VISION_MODELS = new Set([
-  "moonshotai/Kimi-K2.6",
-]);
+const VISION_MODELS = new Set(['moonshotai/Kimi-K2.6', 'moonshotai/Kimi-K3']);
 
 // Cache for models to avoid repeated API calls
 let cachedModels: Record<string, object> | undefined;
