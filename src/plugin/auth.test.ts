@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import type { OAuthAuthDetails } from './types';
+
 import { ACCESS_TOKEN_EXPIRY_BUFFER_MS } from '../constants';
 import { accessTokenExpired } from './auth';
-import type { OAuthAuthDetails } from './types';
 
 describe('accessTokenExpired - Issue #5', () => {
   // With raw expiry storage, the buffer lives ONLY in the check.

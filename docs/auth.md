@@ -91,7 +91,7 @@ sequenceDiagram
     participant K as Keycloak
     participant CB as Callback Server (localhost:8787)
 
-    U->>OC: /connect → select "Login with Berget"
+    U->>OC: /connect → select "Log in with Berget AI (requires a Berget Code seat)"
     OC->>BP: Call authorize()
     BP->>BP: Generate PKCE verifier, challenge (S256), state nonce
     BP->>K: Redirect browser to /auth with challenge, state, scopes
@@ -314,7 +314,7 @@ This is by design — the port must match the `redirect_uri` registered with Key
 
 ## API Key Authentication
 
-The simpler path. When the user selects "Enter Berget API Key manually":
+The simpler path. When the user selects "Use a Berget AI API key":
 
 1. OpenCode stores the key in its secure credential store.
 2. `getAuth()` returns `{ type: 'api', key: 'sk-...' }`.

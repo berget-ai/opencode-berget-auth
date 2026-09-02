@@ -156,15 +156,15 @@ ln -s /absolute/path/to/opencode-berget-auth ~/.config/opencode/plugins/berget-a
 
 1. Run `opencode` in your test project
 2. Type `/connect`
-3. You should see **"Login with Berget"** as an auth option
+3. You should see **"Log in with Berget AI (requires a Berget Code seat)"** as an auth option
 4. Check logs — the plugin calls `logDebug('Initializing Berget Auth Plugin')` on startup
 
 ### Testing Auth Flows
 
 | Flow               | How to Test                                                                                             |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| **OAuth / SSO**    | `/connect` → "Login with Berget" → browser opens → complete login                                       |
-| **API Key**        | `/connect` → "Enter Berget API Key manually" → paste a key                                              |
+| **OAuth / SSO**    | `/connect` → "Log in with Berget AI (requires a Berget Code seat)" → browser opens → complete login     |
+| **API Key**        | `/connect` → "Use a Berget AI API key" → paste a key                                                    |
 | **Token Refresh**  | Start a session, wait for token expiry (or temporarily shorten expiry in code), then send a new message |
 | **Model Fetching** | After auth, check that Berget models appear in model picker                                             |
 
@@ -262,9 +262,9 @@ Do **not** publish manually from your local machine.
 
 ## Need Help?
 
-- **OpenCode Plugin Docs:** https://opencode.ai/docs/plugins
-- **OpenCode SDK Docs:** https://opencode.ai/docs/sdk
-- **Discord:** https://opencode.ai/discord
-- **Issues:** https://github.com/berget-ai/opencode-berget-auth/issues
+- **OpenCode Plugin Docs:** <https://opencode.ai/docs/plugins>
+- **OpenCode SDK Docs:** <https://opencode.ai/docs/sdk>
+- **Discord:** <https://opencode.ai/discord>
+- **Issues:** <https://github.com/berget-ai/opencode-berget-auth/issues>
 
 Happy coding! 🚀

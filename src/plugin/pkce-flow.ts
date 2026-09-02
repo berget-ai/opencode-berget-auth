@@ -24,7 +24,7 @@ import { logDebug } from './debug';
 
 /**
  * Creates the OAuth authorize method using PKCE flow
- * This is called when user selects "Login with Berget" in OpenCode
+ * This is called when user selects "Log in with Berget AI (requires a Berget Code seat)" in OpenCode
  */
 export function createPkceAuthorizeMethod(): (
   inputs?: Record<string, string>,
@@ -310,10 +310,18 @@ async function executePkceAuthorization(
   const state = generateRandomHex(16);
   const redirectUri = `http://localhost:${PKCE_CALLBACK_PORT}/callback`;
 
-  // Build authorization URL
-  const authUrl = new URL(
-    `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/auth`,
-  );
+  // Build authorization URL — guarded so a malformed BERGET_API_URL surfaces
+  // as a clear error instead of a raw TypeError
+  let authUrl: URL;
+  try {
+    authUrl = new URL(
+      `${getKeycloakUrl()}/realms/${getKeycloakRealm()}/protocol/openid-connect/auth`,
+    );
+  } catch {
+    throw new Error(
+      `Invalid Keycloak URL "${getKeycloakUrl()}" — check the BERGET_API_URL environment variable`,
+    );
+  }
   authUrl.searchParams.set('client_id', KEYCLOAK_CLIENT_ID);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('redirect_uri', redirectUri);
