@@ -20,7 +20,7 @@ opencode
 For team members with a Berget Code seat:
 
 1. Run `/connect` in OpenCode
-2. Select "Login with Berget"
+2. Select "Use Berget Code plan"
 3. Authenticate in browser — token refresh is automatic
 
 ### API Key
@@ -28,7 +28,7 @@ For team members with a Berget Code seat:
 For API key users:
 
 1. Run `/connect` in OpenCode
-2. Select "Enter Berget API Key manually"
+2. Select "Use Berget AI API key"
 3. Paste your key — persisted across sessions
 
 ## How It Works

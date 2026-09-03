@@ -4,10 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AuthOAuthResult } from './types';
 
+const constantsMocks = vi.hoisted(() => ({
+  getKeycloakUrl: vi.fn(() => 'https://keycloak.berget.ai'),
+}));
+
 vi.mock('../constants', () => ({
+  ...constantsMocks,
   ACCESS_TOKEN_EXPIRY_BUFFER_MS: 60_000,
   getKeycloakRealm: () => 'berget',
-  getKeycloakUrl: () => 'https://keycloak.berget.ai',
   KEYCLOAK_CLIENT_ID: 'berget-code',
   PKCE_CALLBACK_PORT: 8787,
 }));
@@ -231,6 +235,16 @@ describe('createPkceAuthorizeMethod - Issue #1', () => {
     expect(callbackResult.error).toBe(
       'Port 8787 is already in use. Another OpenCode login may be in progress. Please wait and try again, or close other OpenCode sessions.',
     );
+  });
+
+  it('rejects with a clear error when the Keycloak URL is invalid (malformed BERGET_API_URL)', async () => {
+    process.env.CI = 'true';
+    constantsMocks.getKeycloakUrl.mockReturnValueOnce('not a valid url');
+
+    const createPkceAuthorizeMethod = await loadSubject();
+    const authorize = createPkceAuthorizeMethod();
+
+    await expect(authorize()).rejects.toThrow(/BERGET_API_URL/);
   });
 });
 
