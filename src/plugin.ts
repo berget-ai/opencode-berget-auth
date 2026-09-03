@@ -131,11 +131,11 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
       methods: [
         {
           authorize: createPkceAuthorizeMethod(),
-          label: 'Log in with Berget AI (requires a Berget Code seat)',
+          label: 'Use Berget Code seat',
           type: 'oauth' as const,
         },
         {
-          label: 'Use a Berget AI API key',
+          label: 'Use Berget AI API key',
           type: 'api' as const,
         },
       ],
