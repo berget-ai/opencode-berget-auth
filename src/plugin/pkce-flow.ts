@@ -24,7 +24,7 @@ import { logDebug } from './debug';
 
 /**
  * Creates the OAuth authorize method using PKCE flow
- * This is called when user selects "Use Berget Code seat" in OpenCode
+ * This is called when user selects "Use Berget Code plan" in OpenCode
  */
 export function createPkceAuthorizeMethod(): (
   inputs?: Record<string, string>,

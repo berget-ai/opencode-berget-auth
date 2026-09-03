@@ -91,7 +91,7 @@ sequenceDiagram
     participant K as Keycloak
     participant CB as Callback Server (localhost:8787)
 
-    U->>OC: /connect → select "Use Berget Code seat"
+    U->>OC: /connect → select "Use Berget Code plan"
     OC->>BP: Call authorize()
     BP->>BP: Generate PKCE verifier, challenge (S256), state nonce
     BP->>K: Redirect browser to /auth with challenge, state, scopes

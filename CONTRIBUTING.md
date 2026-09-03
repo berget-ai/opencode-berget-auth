@@ -156,14 +156,14 @@ ln -s /absolute/path/to/opencode-berget-auth ~/.config/opencode/plugins/berget-a
 
 1. Run `opencode` in your test project
 2. Type `/connect`
-3. You should see **"Use Berget Code seat"** as an auth option
+3. You should see **"Use Berget Code plan"** as an auth option
 4. Check logs — the plugin calls `logDebug('Initializing Berget Auth Plugin')` on startup
 
 ### Testing Auth Flows
 
 | Flow               | How to Test                                                                                             |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| **OAuth / SSO**    | `/connect` → "Use Berget Code seat" → browser opens → complete login                                    |
+| **OAuth / SSO**    | `/connect` → "Use Berget Code plan" → browser opens → complete login                                    |
 | **API Key**        | `/connect` → "Use Berget AI API key" → paste a key                                                      |
 | **Token Refresh**  | Start a session, wait for token expiry (or temporarily shorten expiry in code), then send a new message |
 | **Model Fetching** | After auth, check that Berget models appear in model picker                                             |
