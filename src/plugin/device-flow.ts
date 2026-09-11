@@ -95,20 +95,12 @@ async function buildInstructions(
   const qrCode = await generateTerminalQrCode(verificationUri);
   const validMinutes = Math.round(deviceInfo.expires_in / 60);
 
-  const dividerLabel = ' or ';
-  const dividerDashCount = Math.floor((DIALOG_CONTENT_WIDTH - dividerLabel.length) / 2);
-  const divider = `${'─'.repeat(dividerDashCount)}${dividerLabel}${'─'.repeat(dividerDashCount)}`;
-
   const lines = [
     'Scan with your phone:',
     '',
     ...qrCode.split('\n').map((line) => centerLine(line)),
     '',
-    divider,
-    '',
-    'Or open the link below — the code is included.',
-    '',
-    `Valid for ${validMinutes} minutes.`,
+    `Or open the link below — the code is included (valid for ${validMinutes} minutes).`,
   ];
   return lines.join('\n');
 }
