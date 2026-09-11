@@ -31,12 +31,12 @@ export const KEYCLOAK_CLIENT_ID = 'berget-code';
 export const getKeycloakUrl = (): string => {
   const apiUrl = getApiUrl();
   if (apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
-    return 'https://keycloak.stage.berget.ai'; // Local dev uses stage Keycloak
+    return 'https://auth.stage.berget.ai'; // Local dev uses stage Keycloak
   }
   if (apiUrl.includes('stage')) {
-    return 'https://keycloak.stage.berget.ai';
+    return 'https://auth.stage.berget.ai';
   }
-  return 'https://keycloak.berget.ai';
+  return 'https://auth.berget.ai';
 };
 
 export const getKeycloakRealm = (): string => 'berget';
