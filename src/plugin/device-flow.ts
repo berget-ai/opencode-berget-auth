@@ -190,29 +190,6 @@ function formatPollError(errorData: TokenErrorResponse): string {
 const QR_QUIET_ZONE_MODULES = 2;
 
 /**
- * Quadrant block glyphs indexed by a 2x2 module pattern:
- * bit 0 = top-left, bit 1 = top-right, bit 2 = bottom-left, bit 3 = bottom-right.
- */
-const QUADRANT_GLYPHS = [
-  ' ',
-  '▘',
-  '▝',
-  '▀',
-  '▖',
-  '▌',
-  '▞',
-  '▛',
-  '▗',
-  '▚',
-  '▐',
-  '▜',
-  '▄',
-  '▙',
-  '▟',
-  '█',
-] as const;
-
-/**
  * Single token poll request. Returns undefined on transport errors or
  * non-JSON bodies (e.g. a 502 HTML page from the gateway in front of
  * Keycloak) so the caller keeps retrying until the deadline.
@@ -254,11 +231,11 @@ async function fetchTokenPollBody(
 }
 
 /**
- * Renders the QR matrix as quadrant blocks: one character covers a 2x2
- * module area using ▘▝▖▗-style glyphs, halving both width and height
- * compared to half-block rendering. The instructions dialog is not
- * scrollable in the OpenCode TUI and is vertically centered, so every
- * saved row counts on small terminals.
+ * Renders the QR matrix as half-block pairs: one character covers two
+ * vertical modules using ▀/▄/█/space. Terminal cells are ~1:2 (w:h),
+ * so one module = one char wide, half a char tall — i.e. square pixels.
+ * (Quadrant ▘▝▖▗ rendering halves the height further but assumes square
+ * cells, producing a stretched, unreliable-to-scan code.)
  * Light blocks on the terminal's dark background — scannable on dark themes.
  */
 async function generateTerminalQrCode(data: string): Promise<string> {
@@ -280,13 +257,18 @@ async function generateTerminalQrCode(data: string): Promise<string> {
   const rows: string[] = [];
   for (let r = 0; r < total; r += 2) {
     let row = '';
-    for (let c = 0; c < total; c += 2) {
-      const pattern =
-        moduleAt(r, c) |
-        (moduleAt(r, c + 1) << 1) |
-        (moduleAt(r + 1, c) << 2) |
-        (moduleAt(r + 1, c + 1) << 3);
-      row += QUADRANT_GLYPHS[pattern];
+    for (let c = 0; c < total; c += 1) {
+      const top = moduleAt(r, c) === 1;
+      const bottom = moduleAt(r + 1, c) === 1;
+      if (top && bottom) {
+        row += '█';
+      } else if (top) {
+        row += '▀';
+      } else if (bottom) {
+        row += '▄';
+      } else {
+        row += ' ';
+      }
     }
     rows.push(row);
   }
