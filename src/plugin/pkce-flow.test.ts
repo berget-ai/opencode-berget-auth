@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthOAuthResult } from './types';
 
 const constantsMocks = vi.hoisted(() => ({
-  getKeycloakUrl: vi.fn(() => 'https://keycloak.berget.ai'),
+  getKeycloakUrl: vi.fn(() => 'https://auth.berget.ai'),
 }));
 
 vi.mock('../constants', () => ({
