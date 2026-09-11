@@ -36,7 +36,7 @@ export const getKeycloakUrl = (): string => {
   if (apiUrl.includes('stage')) {
     return 'https://auth.stage.berget.ai';
   }
-  return 'https://keycloak.berget.ai';
+  return 'https://auth.berget.ai';
 };
 
 export const getKeycloakRealm = (): string => 'berget';
