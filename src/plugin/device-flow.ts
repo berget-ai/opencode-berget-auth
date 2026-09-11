@@ -39,6 +39,55 @@ export function createDeviceAuthorizeMethod(): (
   return executeDeviceAuthorization;
 }
 
+export function extractTokenResult(data: Record<string, unknown>): AuthOAuthResult | undefined {
+  if (!(typeof data.access_token === 'string' && typeof data.expires_in === 'number')) {
+    return undefined;
+  }
+  if (typeof data.refresh_token !== 'string') {
+    logDebug('Token poll returned malformed body');
+    return { error: 'Invalid token response from authorization server', type: 'failed' };
+  }
+
+  logDebug('Successfully obtained tokens via device flow');
+
+  return {
+    access: data.access_token,
+    expires: Date.now() + data.expires_in * 1000,
+    refresh: data.refresh_token,
+    type: 'success',
+  };
+}
+
+export function handleTokenPollError(
+  errorData: TokenErrorResponse,
+  intervalSeconds: number,
+): { interval?: number; result?: AuthOAuthResult } {
+  switch (errorData.error) {
+    case 'access_denied': {
+      return { result: { error: 'Sign-in was denied in the browser.', type: 'failed' } };
+    }
+    case 'authorization_pending': {
+      return {};
+    }
+    case 'expired_token': {
+      return {
+        result: { error: 'Device code expired. Please try signing in again.', type: 'failed' },
+      };
+    }
+    case 'slow_down': {
+      const newInterval = Math.min(
+        intervalSeconds + DEFAULT_POLL_INTERVAL_SECONDS,
+        MAX_POLL_INTERVAL_SECONDS,
+      );
+      logDebug(`Received slow_down, new interval: ${newInterval}s`);
+      return { interval: newInterval };
+    }
+    default: {
+      return { result: { error: formatPollError(errorData), type: 'failed' } };
+    }
+  }
+}
+
 async function buildInstructions(
   deviceInfo: DeviceAuthorizationResponse,
   verificationUri: string,
@@ -130,25 +179,6 @@ async function executeDeviceAuthorization(
   };
 }
 
-function extractTokenResult(data: Record<string, unknown>): AuthOAuthResult | undefined {
-  if (!(typeof data.access_token === 'string' && typeof data.expires_in === 'number')) {
-    return undefined;
-  }
-  if (typeof data.refresh_token !== 'string') {
-    logDebug('Token poll returned malformed body');
-    return { error: 'Invalid token response from authorization server', type: 'failed' };
-  }
-
-  logDebug('Successfully obtained tokens via device flow');
-
-  return {
-    access: data.access_token,
-    expires: Date.now() + data.expires_in * 1000,
-    refresh: data.refresh_token,
-    type: 'success',
-  };
-}
-
 function formatPollError(errorData: TokenErrorResponse): string {
   if (!errorData.error_description) {
     return `Device flow failed: ${errorData.error}`;
@@ -158,6 +188,47 @@ function formatPollError(errorData: TokenErrorResponse): string {
 }
 
 const QR_QUIET_ZONE_MODULES = 2;
+
+/**
+ * Single token poll request. Returns undefined on transport errors or
+ * non-JSON bodies (e.g. a 502 HTML page from the gateway in front of
+ * Keycloak) so the caller keeps retrying until the deadline.
+ */
+async function fetchTokenPollBody(
+  baseUrl: string,
+  deviceInfo: DeviceAuthorizationResponse,
+): Promise<Record<string, unknown> | undefined> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${TOKEN_ENDPOINT_PATH}`, {
+      body: new URLSearchParams({
+        client_id: KEYCLOAK_CLIENT_ID,
+        device_code: deviceInfo.device_code,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      }).toString(),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      method: 'POST',
+    });
+  } catch (error) {
+    logDebug(
+      `Token poll request failed, retrying: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
+
+  try {
+    return (await response.json()) as Record<string, unknown>;
+  } catch (error) {
+    logDebug(
+      `Token poll returned non-JSON body (status ${response.status}), retrying: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return undefined;
+  }
+}
 
 /**
  * Renders the QR matrix manually as half-block pairs: one character
@@ -202,36 +273,6 @@ async function generateTerminalQrCode(data: string): Promise<string> {
   return rows.join('\n');
 }
 
-function handleTokenPollError(
-  errorData: TokenErrorResponse,
-  intervalSeconds: number,
-): { interval?: number; result?: AuthOAuthResult } {
-  switch (errorData.error) {
-    case 'access_denied': {
-      return { result: { error: 'Sign-in was denied in the browser.', type: 'failed' } };
-    }
-    case 'authorization_pending': {
-      return {};
-    }
-    case 'expired_token': {
-      return {
-        result: { error: 'Device code expired. Please try signing in again.', type: 'failed' },
-      };
-    }
-    case 'slow_down': {
-      const newInterval = Math.min(
-        intervalSeconds + DEFAULT_POLL_INTERVAL_SECONDS,
-        MAX_POLL_INTERVAL_SECONDS,
-      );
-      logDebug(`Received slow_down, new interval: ${newInterval}s`);
-      return { interval: newInterval };
-    }
-    default: {
-      return { result: { error: formatPollError(errorData), type: 'failed' } };
-    }
-  }
-}
-
 async function pollForTokens(
   baseUrl: string,
   deviceInfo: DeviceAuthorizationResponse,
@@ -242,27 +283,10 @@ async function pollForTokens(
   while (Date.now() < deadline) {
     await sleep(intervalSeconds * 1000);
 
-    let response: Response;
-    try {
-      response = await fetch(`${baseUrl}${TOKEN_ENDPOINT_PATH}`, {
-        body: new URLSearchParams({
-          client_id: KEYCLOAK_CLIENT_ID,
-          device_code: deviceInfo.device_code,
-          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-        }).toString(),
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        method: 'POST',
-      });
-    } catch (error) {
-      logDebug(
-        `Token poll request failed, retrying: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    const data = await fetchTokenPollBody(baseUrl, deviceInfo);
+    if (!data) {
       continue;
     }
-
-    const data = (await response.json()) as Record<string, unknown>;
 
     const success = extractTokenResult(data);
     if (success) {
