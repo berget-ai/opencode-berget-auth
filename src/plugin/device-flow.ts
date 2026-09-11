@@ -187,7 +187,7 @@ function formatPollError(errorData: TokenErrorResponse): string {
   return `Device flow failed: ${errorData.error} — ${description}`;
 }
 
-const QR_QUIET_ZONE_MODULES = 2;
+const QR_QUIET_ZONE_MODULES = 1;
 
 /**
  * Single token poll request. Returns undefined on transport errors or
@@ -238,7 +238,11 @@ async function fetchTokenPollBody(
  * Light blocks on the terminal's dark background — scannable on dark themes.
  */
 async function generateTerminalQrCode(data: string): Promise<string> {
-  const code = QRCode.create(data, { errorCorrectionLevel: 'M' });
+  // Error correction 'L' keeps the matrix one version smaller than 'M' for
+  // our URL length, saving several terminal rows — the instructions dialog
+  // is not scrollable in the OpenCode TUI, so height matters more than
+  // damage tolerance for a QR displayed on a clean screen.
+  const code = QRCode.create(data, { errorCorrectionLevel: 'L' });
   const size = code.modules.size;
 
   const rows: string[] = [];
