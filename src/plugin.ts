@@ -18,6 +18,7 @@ import type { Hooks, OAuthAuthDetails, PluginInput } from './plugin/types';
 import { BERGET_PROVIDER_ID, getInferenceUrl } from './constants';
 import { accessTokenExpired, isOAuthAuth } from './plugin/auth';
 import { logDebug, logError } from './plugin/debug';
+import { createDeviceAuthorizeMethod } from './plugin/device-flow';
 import { fetchBergetModels } from './plugin/models';
 import { createPkceAuthorizeMethod } from './plugin/pkce-flow';
 import { refreshAccessTokenDirect } from './plugin/token';
@@ -131,7 +132,12 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
       methods: [
         {
           authorize: createPkceAuthorizeMethod(),
-          label: 'Use Berget Code plan',
+          label: 'Berget Code Seat - Magic link',
+          type: 'oauth' as const,
+        },
+        {
+          authorize: createDeviceAuthorizeMethod(),
+          label: 'Berget Code Seat - QR or device code',
           type: 'oauth' as const,
         },
         {
