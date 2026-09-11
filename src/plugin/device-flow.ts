@@ -187,7 +187,30 @@ function formatPollError(errorData: TokenErrorResponse): string {
   return `Device flow failed: ${errorData.error} — ${description}`;
 }
 
-const QR_QUIET_ZONE_MODULES = 1;
+const QR_QUIET_ZONE_MODULES = 2;
+
+/**
+ * Quadrant block glyphs indexed by a 2x2 module pattern:
+ * bit 0 = top-left, bit 1 = top-right, bit 2 = bottom-left, bit 3 = bottom-right.
+ */
+const QUADRANT_GLYPHS = [
+  ' ',
+  '▘',
+  '▝',
+  '▀',
+  '▖',
+  '▌',
+  '▞',
+  '▛',
+  '▗',
+  '▚',
+  '▐',
+  '▜',
+  '▄',
+  '▙',
+  '▟',
+  '█',
+] as const;
 
 /**
  * Single token poll request. Returns undefined on transport errors or
@@ -231,47 +254,41 @@ async function fetchTokenPollBody(
 }
 
 /**
- * Renders the QR matrix manually as half-block pairs: one character
- * covers two vertical modules using ▀/▄/█/space. Full-width spaces and
- * double characters get collapsed by the OpenCode TUI, so this
- * half-block encoding is the only reliable rendering there.
+ * Renders the QR matrix as quadrant blocks: one character covers a 2x2
+ * module area using ▘▝▖▗-style glyphs, halving both width and height
+ * compared to half-block rendering. The instructions dialog is not
+ * scrollable in the OpenCode TUI and is vertically centered, so every
+ * saved row counts on small terminals.
  * Light blocks on the terminal's dark background — scannable on dark themes.
  */
 async function generateTerminalQrCode(data: string): Promise<string> {
   // Error correction 'L' keeps the matrix one version smaller than 'M' for
-  // our URL length, saving several terminal rows — the instructions dialog
-  // is not scrollable in the OpenCode TUI, so height matters more than
-  // damage tolerance for a QR displayed on a clean screen.
+  // our URL length — damage tolerance matters little on a clean screen.
   const code = QRCode.create(data, { errorCorrectionLevel: 'L' });
   const size = code.modules.size;
+  const total = size + QR_QUIET_ZONE_MODULES * 2;
+
+  const moduleAt = (row: number, col: number): number => {
+    const qrRow = row - QR_QUIET_ZONE_MODULES;
+    const qrCol = col - QR_QUIET_ZONE_MODULES;
+    if (qrRow < 0 || qrRow >= size || qrCol < 0 || qrCol >= size) {
+      return 0;
+    }
+    return code.modules.get(qrRow, qrCol) === 1 ? 1 : 0;
+  };
 
   const rows: string[] = [];
-  const rowWidth = size + QR_QUIET_ZONE_MODULES * 2;
-  const quietRow = ' '.repeat(rowWidth);
-
-  rows.length = QR_QUIET_ZONE_MODULES;
-  rows.fill(quietRow);
-
-  for (let r = 0; r < size; r += 2) {
-    let row = ' '.repeat(QR_QUIET_ZONE_MODULES);
-    for (let c = 0; c < size; c += 1) {
-      const top = code.modules.get(r, c) === 1;
-      const bottom = r + 1 < size && code.modules.get(r + 1, c) === 1;
-      if (top && bottom) {
-        row += '█';
-      } else if (top) {
-        row += '▀';
-      } else if (bottom) {
-        row += '▄';
-      } else {
-        row += ' ';
-      }
+  for (let r = 0; r < total; r += 2) {
+    let row = '';
+    for (let c = 0; c < total; c += 2) {
+      const pattern =
+        moduleAt(r, c) |
+        (moduleAt(r, c + 1) << 1) |
+        (moduleAt(r + 1, c) << 2) |
+        (moduleAt(r + 1, c + 1) << 3);
+      row += QUADRANT_GLYPHS[pattern];
     }
     rows.push(row);
-  }
-
-  for (let index = 0; index < QR_QUIET_ZONE_MODULES; index += 1) {
-    rows.push(quietRow);
   }
 
   return rows.join('\n');
