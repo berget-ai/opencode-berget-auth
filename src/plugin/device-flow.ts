@@ -100,7 +100,7 @@ async function buildInstructions(
     '',
     ...qrCode.split('\n').map((line) => centerLine(line)),
     '',
-    `Or open the link below — the code is included (valid for ${validMinutes} minutes).`,
+    `Or open the link above — the code is included (valid for ${validMinutes} minutes).`,
   ];
   return lines.join('\n');
 }
