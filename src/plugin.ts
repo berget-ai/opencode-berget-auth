@@ -137,7 +137,7 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
         },
         {
           authorize: createDeviceAuthorizeMethod(),
-          label: 'Berget Code Seat - QR or device code',
+          label: 'Berget Code Seat - Login using other device with QR',
           type: 'oauth' as const,
         },
         {

@@ -23,12 +23,12 @@ For team members with a Berget Code seat, on machines with a browser:
 2. Select "Berget Code Seat - Magic link"
 3. The login page opens in your browser — token refresh is automatic
 
-### Berget Code Seat — QR or device code
+### Berget Code Seat — Login using other device with QR
 
 For headless environments (SSH, CI, containers) where the browser cannot open on the same machine:
 
 1. Run `/connect` in OpenCode
-2. Select "Berget Code Seat - QR or device code"
+2. Select "Berget Code Seat - Login using other device with QR"
 3. Scan the QR code with your phone, or open the link shown in the dialog — the sign-in code is already included in it
 4. Approve the sign-in on the other device; OpenCode continues automatically
 
