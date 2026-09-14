@@ -132,16 +132,16 @@ export const BergetAuthPlugin = async ({ client }: PluginInput): Promise<Hooks> 
       methods: [
         {
           authorize: createPkceAuthorizeMethod(),
-          label: 'Berget Code Seat - Magic link',
+          label: 'Berget Code Seat - Login using this device',
           type: 'oauth' as const,
         },
         {
           authorize: createDeviceAuthorizeMethod(),
-          label: 'Berget Code Seat - QR or device code',
+          label: 'Berget Code Seat - Login using other device with QR',
           type: 'oauth' as const,
         },
         {
-          label: 'Use Berget AI API key',
+          label: 'Berget API Key - Enter API key manually',
           type: 'api' as const,
         },
       ],
