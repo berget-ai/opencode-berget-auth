@@ -95,20 +95,12 @@ async function buildInstructions(
   const qrCode = await generateTerminalQrCode(verificationUri);
   const validMinutes = Math.round(deviceInfo.expires_in / 60);
 
-  const dividerLabel = ' or ';
-  const dividerDashCount = Math.floor((DIALOG_CONTENT_WIDTH - dividerLabel.length) / 2);
-  const divider = `${'─'.repeat(dividerDashCount)}${dividerLabel}${'─'.repeat(dividerDashCount)}`;
-
   const lines = [
     'Scan with your phone:',
     '',
     ...qrCode.split('\n').map((line) => centerLine(line)),
     '',
-    divider,
-    '',
-    'Or open the link below — the code is included.',
-    '',
-    `Valid for ${validMinutes} minutes.`,
+    `Or open the link above — the code is included (valid for ${validMinutes} minutes).`,
   ];
   return lines.join('\n');
 }
@@ -231,28 +223,35 @@ async function fetchTokenPollBody(
 }
 
 /**
- * Renders the QR matrix manually as half-block pairs: one character
- * covers two vertical modules using ▀/▄/█/space. Full-width spaces and
- * double characters get collapsed by the OpenCode TUI, so this
- * half-block encoding is the only reliable rendering there.
+ * Renders the QR matrix as half-block pairs: one character covers two
+ * vertical modules using ▀/▄/█/space. Terminal cells are ~1:2 (w:h),
+ * so one module = one char wide, half a char tall — i.e. square pixels.
+ * (Quadrant ▘▝▖▗ rendering halves the height further but assumes square
+ * cells, producing a stretched, unreliable-to-scan code.)
  * Light blocks on the terminal's dark background — scannable on dark themes.
  */
 async function generateTerminalQrCode(data: string): Promise<string> {
-  const code = QRCode.create(data, { errorCorrectionLevel: 'M' });
+  // Error correction 'L' keeps the matrix one version smaller than 'M' for
+  // our URL length — damage tolerance matters little on a clean screen.
+  const code = QRCode.create(data, { errorCorrectionLevel: 'L' });
   const size = code.modules.size;
+  const total = size + QR_QUIET_ZONE_MODULES * 2;
+
+  const moduleAt = (row: number, col: number): number => {
+    const qrRow = row - QR_QUIET_ZONE_MODULES;
+    const qrCol = col - QR_QUIET_ZONE_MODULES;
+    if (qrRow < 0 || qrRow >= size || qrCol < 0 || qrCol >= size) {
+      return 0;
+    }
+    return code.modules.get(qrRow, qrCol) === 1 ? 1 : 0;
+  };
 
   const rows: string[] = [];
-  const rowWidth = size + QR_QUIET_ZONE_MODULES * 2;
-  const quietRow = ' '.repeat(rowWidth);
-
-  rows.length = QR_QUIET_ZONE_MODULES;
-  rows.fill(quietRow);
-
-  for (let r = 0; r < size; r += 2) {
-    let row = ' '.repeat(QR_QUIET_ZONE_MODULES);
-    for (let c = 0; c < size; c += 1) {
-      const top = code.modules.get(r, c) === 1;
-      const bottom = r + 1 < size && code.modules.get(r + 1, c) === 1;
+  for (let r = 0; r < total; r += 2) {
+    let row = '';
+    for (let c = 0; c < total; c += 1) {
+      const top = moduleAt(r, c) === 1;
+      const bottom = moduleAt(r + 1, c) === 1;
       if (top && bottom) {
         row += '█';
       } else if (top) {
@@ -264,10 +263,6 @@ async function generateTerminalQrCode(data: string): Promise<string> {
       }
     }
     rows.push(row);
-  }
-
-  for (let index = 0; index < QR_QUIET_ZONE_MODULES; index += 1) {
-    rows.push(quietRow);
   }
 
   return rows.join('\n');
