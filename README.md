@@ -20,7 +20,7 @@ opencode
 For team members with a Berget Code seat, on machines with a browser:
 
 1. Run `/connect` in OpenCode
-2. Select "Berget Code Seat - Magic link"
+2. Select "Berget Code Seat - Login using this device"
 3. The login page opens in your browser — token refresh is automatic
 
 ### Berget Code Seat — QR or device code
@@ -39,7 +39,7 @@ The sign-in is valid for 10 minutes. If it times out, just run `/connect` again.
 For API key users:
 
 1. Run `/connect` in OpenCode
-2. Select "Use Berget AI API key"
+2. Select "Berget API Key - Enter API key manually"
 3. Paste your key — persisted across sessions
 
 ## How It Works
