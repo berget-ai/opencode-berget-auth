@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { extractTokenResult, handleTokenPollError } from './device-flow';
+import {
+  createDeviceAuthorizeMethod,
+  extractTokenResult,
+  handleTokenPollError,
+} from './device-flow';
 
 vi.mock('../constants', () => ({
   getKeycloakRealm: () => 'berget',
@@ -41,6 +45,46 @@ describe('extractTokenResult', () => {
     }
     expect(result.expires).toBeGreaterThanOrEqual(before + 300_000);
     expect(result.expires).toBeLessThanOrEqual(Date.now() + 300_000);
+  });
+});
+
+function stubDeviceAuthorizationResponse(body: Record<string, unknown>): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json(body, { status: 200 })),
+  );
+}
+
+describe('createDeviceAuthorizeMethod expiresAt', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('sets expiresAt from expires_in on a well-formed response', async () => {
+    stubDeviceAuthorizationResponse({
+      device_code: 'dc',
+      expires_in: 300,
+      user_code: 'ABCD-EFGH',
+      verification_uri: 'https://auth.berget.ai/device',
+    });
+
+    const before = Date.now();
+    const result = await createDeviceAuthorizeMethod()();
+
+    expect(result.expiresAt).toBeGreaterThanOrEqual(before + 300_000);
+    expect(result.expiresAt).toBeLessThanOrEqual(Date.now() + 300_000);
+  });
+
+  it('omits expiresAt when the response lacks a numeric expires_in', async () => {
+    stubDeviceAuthorizationResponse({
+      device_code: 'dc',
+      user_code: 'ABCD-EFGH',
+      verification_uri: 'https://auth.berget.ai/device',
+    });
+
+    const result = await createDeviceAuthorizeMethod()();
+
+    expect(result.expiresAt).toBeUndefined();
   });
 });
 

@@ -37,3 +37,9 @@ npm-debug.log*
 
 # Local review artifacts
 TODO.md
+*.tgz
+
+# Local planning docs (not part of the package)
+MIGRATE_V2.md
+IMPLEMENTATION_PLAN_V2.md
+PHASE0_FINDINGS.md

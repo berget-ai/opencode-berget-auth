@@ -54,6 +54,8 @@ export type AuthOAuthResult =
  */
 export interface AuthorizeResult {
   callback: (() => Promise<AuthOAuthResult>) | ((code: string) => Promise<AuthOAuthResult>);
+  /** Epoch ms when the authorization attempt expires, if known (device flow). */
+  expiresAt?: number;
   instructions: string;
   method: 'auto' | 'code';
   url: string;
