@@ -13,6 +13,6 @@
     "isolatedModules": true,
     "types": ["bun-types", "node"]
   },
-  "include": ["index.ts", "src/**/*.ts", "vitest.config.ts"],
+  "include": ["index.ts", "index.test.ts", "src/**/*.ts", "vitest.config.ts"],
   "exclude": ["node_modules"]
 }

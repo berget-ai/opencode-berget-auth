@@ -9,7 +9,7 @@ for the provider to capture `Authorization` headers.
 ## Verified (green)
 
 - **(a) Method registration.** The integration transform upserts cleanly onto the
-  *native* `berget` integration (models.dev): plugin methods (`oauth`, `device`,
+  _native_ `berget` integration (models.dev): plugin methods (`oauth`, `device`,
   labeled key) merge with the framework's `env` method; display name set to
   "Berget AI".
 - **(b) Token injection is automatic — no hook needed.** The `key`-method
@@ -17,7 +17,7 @@ for the provider to capture `Authorization` headers.
   token both reached `POST /v1/chat/completions` on the provider
   baseURL without any plugin-side header injection. Resolves MIGRATE_V2.md's open
   question about the key method positively — no `model.request` fallback needed.
-- **(c) Refresh pipeline E2E.** Seeded an *expired* OAuth credential with the real
+- **(c) Refresh pipeline E2E.** Seeded an _expired_ OAuth credential with the real
   V1 refresh token. On `connection.resolve` the framework called the plugin's
   `refresh` (`methodID: "oauth"`), which POSTed to
   `https://api.berget.ai/v1/auth/refresh` → fresh 900 s JWT → **re-persisted**
@@ -47,7 +47,7 @@ for the provider to capture `Authorization` headers.
    (`@opencode/cli@2.0.22`). `DatabaseMigration.apply` bootstraps a fresh db with
    `schema.up` and journal-inserts **all 48 migration ids — without executing
    their `up()`**. `20260805200742_import_legacy_credentials` only runs via
-   `applyOnly` when upgrading an *existing older-V2* db. Verified twice with
+   `applyOnly` when upgrading an _existing older-V2_ db. Verified twice with
    seeded `auth.json` (berget + openai entries): 0 credentials imported,
    `GET /api/experimental/migration/v1` → `{"status":"completed"}`. MIGRATE_V2.md's
    "V2 imports the V1 store automatically" is **wrong for first V2 startup**
@@ -62,7 +62,7 @@ for the provider to capture `Authorization` headers.
    assumed. Phase 4 E2E legs must use `@opencode/cli`.
 3. **Berget is native in V2's models.dev provider registry** (env
    `BERGET_API_KEY`, openai-compatible, `https://api.berget.ai/v1`, model catalog
-   included). Consequences: key/env auth works in V2 *without* our plugin; the
+   included). Consequences: key/env auth works in V2 _without_ our plugin; the
    V2 plugin's unique value is OAuth (PKCE + device) + refresh + the docs/
    UX around it. Also means `methodID: "oauth"` for the PKCE method remains
    correct for the import-matching path (unused until the import is fixed or
@@ -89,4 +89,4 @@ for the provider to capture `Authorization` headers.
 - Real V1 `auth.json` was copied (never modified) into isolated data dirs; one
   real refresh performed using the V1 refresh token (V1 Keycloak session still
   valid — a real user-visible data point: V1 login survives into a V2 session
-  *if* migrated).
+  _if_ migrated).

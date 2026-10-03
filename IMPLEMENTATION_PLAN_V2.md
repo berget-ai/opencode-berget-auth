@@ -58,7 +58,7 @@ Amendments carried into the phases below:
 - **V1 credentials are NOT auto-imported on fresh V2 dbs** in `@opencode/cli@2.0.22`
   (bootstrap journals all migrations without running their `up()`). Phase 2 gains
   a plugin-side one-time V1 import (read legacy `auth.json`, `credential.create`
-  + activate via the client) — verified as the working fallback.
+  - activate via the client) — verified as the working fallback.
 - Header injection is automatic for both OAuth and key credentials — the
   `model.request` fallback hook is dropped from Phase 3.
 - Type-only devDependency confirmed working — no SDK promotion path needed.
@@ -155,8 +155,8 @@ Changes:
 - `src/v2/provider.ts`: fetch models once in `setup` (reusing
   `fetchBergetModels`/`getInferenceUrl`), capture them, register via a **synchronous**
   `ctx.provider.transform` → `editor.add({ info: { ...Provider.Info.empty('berget'),
-  name: 'Berget AI', activation: 'enabled', integrationID: 'berget',
-  package: '@opencode/ai/providers/openai-compatible', settings: { baseURL } }, models })`.
+name: 'Berget AI', activation: 'enabled', integrationID: 'berget',
+package: '@opencode/ai/providers/openai-compatible', settings: { baseURL } }, models })`.
   Model mapping uses `Model.Info.default(providerID, id)` as the base.
 - `src/v2/setup.ts`: replace the Phase 1 stub with the real wiring
   (integration transform from Phase 2 + provider transform).
@@ -201,7 +201,7 @@ Changes:
   default export fails to load there — no implicit freeze, `engines.opencode` cannot
   substitute), credential-transition section: **V1 logins carry over via the plugin's
   one-time import** (the framework's native import is broken on fresh V2 dbs as of
-  `@opencode/cli@2.0.22`); logins made on V1 *after* the import are not imported
+  `@opencode/cli@2.0.22`); logins made on V1 _after_ the import are not imported
   (re-run triggers only when no `berget` credential exists); V2 refreshes don't
   propagate back to `auth.json`, so downgrading to `@1` after a long V2 session may
   require re-login.

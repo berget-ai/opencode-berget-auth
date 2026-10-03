@@ -431,6 +431,7 @@ community imitation:
    CLI from npm and confirm the plugin loads and registers (this is what keeps user
    installs at `qrcode`-only weight). If it fails because a genuine runtime SDK import is
    needed, that is the documented fallback trigger (see step 2).
+
 2. **Add dependency + dual entrypoint**
    Add `@opencode/plugin` pinned exactly (`2.0.22`) as a **devDependency** — types only.
    The official guide requires a version compatible with the targeted OpenCode release;
@@ -471,6 +472,7 @@ community imitation:
    `connection.resolve`. Assert in unit tests that the id constants used in
    `editor.method.update` and written into returned credentials are the same constants. Verify: unit tests with mocked
    `ctx`; spike validation passes.
+
 4. **Port provider/model registration** (`src/v2/provider.ts`)
    Fetch models in `setup`, capture them, `editor.add(...)` in a synchronous transform. Official
    guidance requires transforms to be "synchronous, cheap, and free of one-time side effects" — load
@@ -494,9 +496,10 @@ community imitation:
 
    Add a credential-transition section (see "Legacy credential migration" above):
    existing V1 logins are imported into V2's credential store automatically on first V2
-   startup; logins made on V1 *after* that are not; on V2, refreshed tokens land only in
+   startup; logins made on V1 _after_ that are not; on V2, refreshed tokens land only in
    V2's store, so downgrading back to `@1` after a long V2 session requires re-login if
    the `auth.json` token expired in the meantime.
+
 7. **E2E matrix** (installed package, not workspace-linked)
    V1 1.3.4 (oldest supported — the object-form loader floor, source-verified; **this leg
    gates the floor**: if it fails, raise the documented floor to >= 1.18.29 per the
@@ -558,8 +561,8 @@ Resolved during research (kept for the record):
   the auth.json key (`"berget"` → `"oauth"`); see "Legacy credential migration" above.
 - ~~Does bun (the V1 1.3.x installer) auto-install the TUI peers~~ — no: bun treats
   `peerDependenciesMeta.optional` the same as npm ([bun install docs](https://bun.com/docs/cli/install#peer-dependencies)
-  + empirical bun 1.3.14 test; 180 MB of regular deps install either way); see "Dependency
-  footprint on V1 users".
+  - empirical bun 1.3.14 test; 180 MB of regular deps install either way); see "Dependency
+    footprint on V1 users".
 - ~~Which installer does each supported CLI use for plugin dependencies~~ — 1.3.4–1.3.13:
   `bun add` ([v1.3.4 source](https://github.com/sst/opencode/blob/v1.3.4/packages/opencode/src/plugin/shared.ts);
   switch in [sst/opencode#18308](https://github.com/sst/opencode/pull/18308)); 1.3.14+ and
