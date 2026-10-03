@@ -48,7 +48,14 @@ export async function fetchV2Models(): Promise<Model.Info[]> {
       return [];
     }
     const data = (await response.json()) as ChatModelsResponse;
-    const models = data.models.map((model) => toModelInfo(BERGET_PROVIDER_ID, model));
+    // limit.context is a required Int in Model.Info — a model without a
+    // usable contextWindow is excluded rather than registered with a bogus 0.
+    const models = data.models
+      .filter(hasContextWindow)
+      .map((model) => toModelInfo(BERGET_PROVIDER_ID, model));
+    if (models.length !== data.models.length) {
+      logDebug(`Skipped ${data.models.length - models.length} chat models without contextWindow`);
+    }
     logDebug(`Fetched ${models.length} chat models for V2`);
     return models;
   } catch (error) {
@@ -103,7 +110,11 @@ export function registerProvider(
   });
 }
 
-function toModelInfo(providerID: string, model: ChatModel): Model.Info {
+function hasContextWindow(model: ChatModel): model is ChatModel & { contextWindow: number } {
+  return Number.isFinite(model.contextWindow);
+}
+
+function toModelInfo(providerID: string, model: ChatModel & { contextWindow: number }): Model.Info {
   const input = VISION_MODELS.has(model.id) ? ['text', 'image'] : ['text'];
 
   return {
@@ -119,7 +130,7 @@ function toModelInfo(providerID: string, model: ChatModel): Model.Info {
     ],
     enabled: true,
     id: model.id,
-    limit: { context: model.contextWindow ?? 0, output: DEFAULT_OUTPUT_LIMIT },
+    limit: { context: model.contextWindow, output: DEFAULT_OUTPUT_LIMIT },
     modelID: model.id,
     name: model.id,
     providerID,

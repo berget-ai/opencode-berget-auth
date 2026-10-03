@@ -66,10 +66,16 @@ export async function importV1Credential(context: Plugin.Context): Promise<Impor
     return 'unavailable';
   }
 
-  let content: string;
-  try {
-    content = await readFile(legacyAuthPath(), 'utf8');
-  } catch {
+  let content: string | undefined;
+  for (const candidate of legacyAuthPaths()) {
+    try {
+      content = await readFile(candidate, 'utf8');
+      break;
+    } catch {
+      // try the next candidate location
+    }
+  }
+  if (content === undefined) {
     logDebug('No legacy auth.json found, skipping V1 credential import');
     return 'missing-file';
   }
@@ -147,7 +153,15 @@ function isImportableOAuth(
   );
 }
 
-function legacyAuthPath(): string {
+/**
+ * Candidate V1 auth.json locations, in V1's own read order: the XDG data dir
+ * (all platforms), then the pre-XDG-migration `~/.opencode` location that V1
+ * still reads as a fallback (verified against `opencode-ai@1.18.34`).
+ */
+function legacyAuthPaths(): string[] {
   const dataHome = process.env.XDG_DATA_HOME || path.join(homedir(), '.local', 'share');
-  return path.join(dataHome, 'opencode', 'auth.json');
+  return [
+    path.join(dataHome, 'opencode', 'auth.json'),
+    path.join(homedir(), '.opencode', 'auth.json'),
+  ];
 }

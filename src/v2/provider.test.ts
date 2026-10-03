@@ -67,6 +67,24 @@ describe('fetchV2Models', () => {
     expect(kimi?.capabilities.input).toEqual(['text', 'image']);
   });
 
+  it('excludes models without a numeric contextWindow instead of defaulting to 0', async () => {
+    mockFetchModelsResponse({
+      data: {
+        models: [
+          { contextWindow: 32_768, id: 'good/model' },
+          { id: 'bad/no-context-window' },
+          { contextWindow: Number.NaN, id: 'bad/nan' },
+        ],
+      },
+      ok: true,
+    });
+
+    const models = await fetchV2Models();
+
+    expect(models.map((model) => model.id)).toEqual(['good/model']);
+    expect(models[0].limit.context).toBe(32_768);
+  });
+
   it('returns an empty list when the catalog endpoint fails', async () => {
     mockFetchModelsResponse({ ok: false, status: 500 });
 

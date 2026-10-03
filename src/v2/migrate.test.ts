@@ -6,6 +6,14 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PKCE_METHOD_ID } from './credential';
+
+const mocks = vi.hoisted(() => ({ home: '' }));
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return { ...actual, homedir: () => mocks.home };
+});
+
 import { importV1Credential } from './migrate';
 
 interface CredentialCalls {
@@ -37,16 +45,24 @@ async function writeAuthJson(content: string): Promise<void> {
   await writeFile(path.join(opencodeDirectory, 'auth.json'), content);
 }
 
+async function writeLegacyAuthJson(content: string): Promise<void> {
+  const legacyDirectory = path.join(mocks.home, '.opencode');
+  await mkdir(legacyDirectory, { recursive: true });
+  await writeFile(path.join(legacyDirectory, 'auth.json'), content);
+}
+
 let dataHome = '';
 
 beforeEach(async () => {
   dataHome = await mkdtemp(path.join(tmpdir(), 'berget-migrate-'));
+  mocks.home = await mkdtemp(path.join(tmpdir(), 'berget-migrate-home-'));
   vi.stubEnv('XDG_DATA_HOME', dataHome);
 });
 
 afterEach(async () => {
   vi.unstubAllEnvs();
   await rm(dataHome, { force: true, recursive: true });
+  await rm(mocks.home, { force: true, recursive: true });
 });
 
 describe('importV1Credential', () => {
@@ -103,6 +119,35 @@ describe('importV1Credential', () => {
         },
       },
     ]);
+  });
+
+  it('imports from the pre-XDG ~/.opencode/auth.json when the XDG location is missing', async () => {
+    await writeLegacyAuthJson(
+      JSON.stringify({
+        berget: { access: 'legacy-dot-opencode', expires: 1, refresh: 'r', type: 'oauth' },
+      }),
+    );
+    const calls: CredentialCalls = { createInputs: [] };
+
+    await expect(importV1Credential(createMockContext(calls))).resolves.toBe('imported');
+    expect(calls.createInputs).toMatchObject([{ value: { access: 'legacy-dot-opencode' } }]);
+  });
+
+  it('prefers the XDG location over ~/.opencode when both exist', async () => {
+    await writeAuthJson(
+      JSON.stringify({
+        berget: { access: 'xdg-location', expires: 1, refresh: 'r', type: 'oauth' },
+      }),
+    );
+    await writeLegacyAuthJson(
+      JSON.stringify({
+        berget: { access: 'legacy-dot-opencode', expires: 1, refresh: 'r', type: 'oauth' },
+      }),
+    );
+    const calls: CredentialCalls = { createInputs: [] };
+
+    await expect(importV1Credential(createMockContext(calls))).resolves.toBe('imported');
+    expect(calls.createInputs).toMatchObject([{ value: { access: 'xdg-location' } }]);
   });
 
   it('skips when a berget credential already exists', async () => {

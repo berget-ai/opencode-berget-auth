@@ -165,7 +165,11 @@ async function executeDeviceAuthorization(
     callback: async (): Promise<AuthOAuthResult> => {
       return pollForTokens(baseUrl, deviceInfo);
     },
-    expiresAt: Date.now() + deviceInfo.expires_in * 1000,
+    // expires_in is REQUIRED by RFC 8628 but the response is an unvalidated
+    // cast; omit expiresAt rather than hand NaN to the V2 framework.
+    expiresAt: Number.isFinite(deviceInfo.expires_in)
+      ? Date.now() + deviceInfo.expires_in * 1000
+      : undefined,
     instructions,
     method: 'auto' as const,
     url: verificationUri,
