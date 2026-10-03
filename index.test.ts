@@ -17,6 +17,12 @@ vi.mock('./src/plugin', () => ({
   BergetOAuthPlugin: { name: 'BergetOAuthPlugin' },
 }));
 
+vi.mock('./src/v2/setup', () => ({
+  setupBergetAuth: vi.fn(async () => {}),
+}));
+
+import { setupBergetAuth } from './src/v2/setup';
+
 describe('dual entrypoint', () => {
   it('default export is the V2 object shape with a V1 server() function', () => {
     expect(typeof plugin).toBe('object');
@@ -26,19 +32,14 @@ describe('dual entrypoint', () => {
   });
 
   it('setup() lazily imports the V2 setup module', async () => {
-    const cleanup = await plugin.setup({} as Parameters<typeof plugin.setup>[0]);
-    expect(cleanup).toBeUndefined();
+    const context = {} as Parameters<typeof plugin.setup>[0];
+    await plugin.setup(context);
+    expect(setupBergetAuth).toHaveBeenCalledWith(context);
   });
 
   it('setup() propagates errors from the V2 setup module', async () => {
-    vi.doMock('./src/v2/setup', () => ({
-      setupBergetAuth: vi.fn().mockRejectedValue(new Error('boom')),
-    }));
-    // The entrypoint holds a static reference to the lazy import; dynamics are
-    // cached per module, so exercise a fresh import graph via resetModules.
-    vi.resetModules();
-    const { default: fresh } = (await import('./index')) as typeof import('./index');
-    await expect(fresh.setup({} as Parameters<typeof fresh.setup>[0])).rejects.toThrow('boom');
+    vi.mocked(setupBergetAuth).mockRejectedValueOnce(new Error('boom'));
+    await expect(plugin.setup({} as Parameters<typeof plugin.setup>[0])).rejects.toThrow('boom');
   });
 
   it('server() delegates to BergetAuthPlugin with the plugin input', async () => {

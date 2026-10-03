@@ -18,6 +18,7 @@ The plugin implements **dual-authentication support** within the OpenCode plugin
 - [Token Refresh Mechanism](#token-refresh-mechanism)
 - [Concurrent Session Handling](#concurrent-session-handling)
 - [API Key Authentication](#api-key-authentication)
+- [OpenCode V2 Credential Storage](#opencode-v2-credential-storage)
 - [Error Handling & Resilience](#error-handling--resilience)
 - [Configuration & Environment](#configuration--environment)
 
@@ -74,6 +75,55 @@ This design means:
 - `currentAuth` is updated **in-place** after every refresh.
 - All subsequent API requests within the same OpenCode process use the fresh token **without restarting**.
 - OpenCode's cached `apiKey` (from the initial `loader` return) is stale, but the custom `fetch` always reads from the live `currentAuth` reference.
+
+---
+
+## OpenCode V2 Credential Storage
+
+This section describes the V2 code path (`src/v2/`), which runs only under OpenCode V2
+CLIs. V1 behavior is unchanged.
+
+### Framework-owned credentials
+
+On V2 the plugin does **not** persist or refresh tokens itself:
+
+- Completing an OAuth attempt hands a `Credential.OAuth` object
+  (`type: 'oauth'`, `methodID`, `refresh`, `access`, integer epoch-ms `expires`) to the
+  framework, which stores it in its credential database.
+- The plugin registers only an `authorize` callback per method and a shared `refresh`
+  callback per OAuth method. Refresh is **lazy**: when a stored credential is within
+  5 minutes of expiry, the framework calls the method's `refresh(credential)` and
+  re-persists the returned credential. There is no background timer.
+- Rejected `authorize`/`refresh` promises surface to the user as failed
+  authorization attempts (`AuthorizationError`).
+
+### Method ids are a compatibility decision
+
+- PKCE registers with id `oauth` — the value V2's legacy credential import assigns to
+  `auth.json` entries for unknown integrations. Migrated credentials route their refresh
+  through the PKCE method (`refreshCredentialOAuth`); a mismatch would surface as
+  `OAuth method not found` or, worse, silent no-refresh after expiry.
+- The device flow registers with the distinct id `device`.
+- Both flows share one Keycloak-backed refresh implementation, so the id assignment
+  does not change refresh behavior.
+
+### V1 credential import
+
+New V2 users who were logged in on V1 should not need to re-authenticate. The plugin
+performs a one-time import in `setup()`: it reads V1's `auth.json`
+(`$XDG_DATA_HOME || ~/.local/share` + `/opencode/auth.json`), and if OpenCode exposes
+the client `credential` API to plugins, creates and activates the equivalent
+`berget` credential with `methodID: 'oauth'`.
+
+Caveats (verified against `@opencode/cli@2.0.22` — see `PHASE0_FINDINGS.md`):
+
+- The CLI's built-in `auth.json` import migration does **not** execute on fresh V2
+  databases (fresh-db bootstrap journals migrations without running them).
+- The plugin context does not yet expose the `credential` API, so the plugin-side
+  import is a no-op on builds with that limitation; users log in once via the V2
+  OAuth methods. The import is feature-detected and activates automatically on
+  builds that expose the API. It is idempotent and never blocks startup.
+- V2-era refreshes update only V2's credential store, not V1's `auth.json`.
 
 ---
 

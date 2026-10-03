@@ -125,6 +125,14 @@ credential already exists, then `credential.create` + `activate` via the client
 fallback is spike-verified end to end). Idempotent by construction; silent no-op
 when `auth.json` is absent or undecodable.
 
+**Refined during Phase 2:** the plugin context does not expose the client's
+`credential` domain (verified in `@opencode/plugin@2.0.22`'s context assembly), so
+the import is **feature-detected** — it creates the credential when
+`ctx.credential.create` exists and is a silent no-op today. The spike's HTTP-API
+verification proved the store accepts the imported credential and refreshes it;
+the feature-detect activates the path automatically on CLI builds that expose the
+domain.
+
 Tests (`src/v2/integration.test.ts`, mocked `ctx`):
 
 - Transform registers exactly three methods with the expected ids/types/modes; display

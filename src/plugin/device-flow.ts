@@ -165,6 +165,7 @@ async function executeDeviceAuthorization(
     callback: async (): Promise<AuthOAuthResult> => {
       return pollForTokens(baseUrl, deviceInfo);
     },
+    expiresAt: Date.now() + deviceInfo.expires_in * 1000,
     instructions,
     method: 'auto' as const,
     url: verificationUri,

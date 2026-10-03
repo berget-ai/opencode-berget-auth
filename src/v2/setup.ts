@@ -1,17 +1,19 @@
 /**
- * OpenCode V2 plugin setup.
+ * OpenCode V2 plugin setup for Berget.
  *
- * Phase 2/3 wire the integration (auth methods) and provider (models)
- * transforms here; this stub only establishes the lazily-imported module so
- * the dual entrypoint in `index.ts` is complete end to end.
- *
- * SDK note: all imports of `@opencode/plugin` in `src/v2/` must be type-only —
- * the package ships as a devDependency and never executes at runtime
- * (enforced by `index.test.ts`).
+ * Runs only in V2 CLIs (the dual entrypoint in `index.ts` loads this module
+ * lazily via dynamic import), wires the integration registration, seeds any
+ * V1 credential, and registers the provider. SDK imports stay type-only —
+ * enforced by `index.test.ts`.
  */
 
 import type { Plugin } from '@opencode/plugin';
 
-export async function setupBergetAuth(_context: Plugin.Context): Promise<void> {
-  // Integration + provider registration lands in phases 2 and 3.
+import { registerIntegration } from './integration';
+import { importV1Credential } from './migrate';
+
+export async function setupBergetAuth(context: Plugin.Context): Promise<void> {
+  await registerIntegration(context);
+  await importV1Credential(context);
+  // Provider/model registration lands in phase 3.
 }
