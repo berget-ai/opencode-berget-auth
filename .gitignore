@@ -37,3 +37,4 @@ npm-debug.log*
 
 # Local review artifacts
 TODO.md
+*.tgz
