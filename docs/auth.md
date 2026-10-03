@@ -125,6 +125,19 @@ Caveats (verified against `@opencode/cli@2.0.22` — see `PHASE0_FINDINGS.md`):
   builds that expose the API. It is idempotent and never blocks startup.
 - V2-era refreshes update only V2's credential store, not V1's `auth.json`.
 
+### Provider registration
+
+The CLI ships a native `berget` provider (models.dev); OpenCode binds its
+credential connections to it automatically. The plugin's provider transform
+composes with that definition instead of replacing it:
+
+- sets `integrationID: 'berget'` and `activation: 'enabled'` (V1's always-on
+  behavior; the native default is activation on first connection);
+- applies `BERGET_INFERENCE_URL` as the `baseURL` override when set;
+- fills in models from the live `/v1/models/chat` catalog that models.dev does
+  not yet list (metadata and costs for known models stay native). Models are
+  fetched once in `setup`; the transform remains synchronous and repeatable.
+
 ---
 
 ## OAuth 2.0 PKCE Login Flow
