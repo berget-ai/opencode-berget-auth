@@ -115,7 +115,7 @@ performs a one-time import in `setup()`: it reads V1's `auth.json`
 the client `credential` API to plugins, creates and activates the equivalent
 `berget` credential with `methodID: 'oauth'`.
 
-Caveats (verified against `@opencode/cli@2.0.22` — see `PHASE0_FINDINGS.md`):
+Caveats (verified against `@opencode/cli@2.0.22` during spike validation):
 
 - The CLI's built-in `auth.json` import migration does **not** execute on fresh V2
   databases (fresh-db bootstrap journals migrations without running them).
