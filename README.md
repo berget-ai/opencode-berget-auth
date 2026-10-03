@@ -2,7 +2,7 @@
 
 Authenticate [OpenCode](https://opencode.ai) with your [Berget AI](https://berget.ai) account.
 
-Works with **OpenCode V2 and V1 from one package** (`@bergetai/opencode-auth@2`):
+Works with **OpenCode V2 and V1 from one package** (`@bergetai/opencode-auth` ≥ 1.2):
 
 - **V2 (`@opencode/cli` ≥ 2.0)** — configure under `"plugins"`
 - **V1 (`opencode-ai` ≥ 1.3.4)** — configure under `"plugin"`
@@ -67,15 +67,16 @@ For API key users:
 
 ## Version Compatibility
 
-| OpenCode CLI          | Plugin version                  | Config key |
-| --------------------- | ------------------------------- | ---------- |
-| `@opencode/cli` (V2)  | `@bergetai/opencode-auth` 2.x   | `plugins`  |
-| `opencode-ai` ≥ 1.3.4 | `@bergetai/opencode-auth` 2.x   | `plugin`   |
-| `opencode-ai` < 1.3.4 | pin `@bergetai/opencode-auth@1` | `plugin`   |
+| OpenCode CLI          | Plugin version                      | Config key |
+| --------------------- | ----------------------------------- | ---------- |
+| `@opencode/cli` (V2)  | `@bergetai/opencode-auth` 1.2.x     | `plugins`  |
+| `opencode-ai` ≥ 1.3.4 | `@bergetai/opencode-auth` 1.2.x     | `plugin`   |
+| `opencode-ai` < 1.3.4 | pin `@bergetai/opencode-auth@1.1.1` | `plugin`   |
 
 OpenCode V1 CLIs older than 1.3.4 cannot load object-form default exports; on those
-versions the plugin fails to load with a visible error. Pin `@bergetai/opencode-auth@1`
-to keep using it on older V1 releases.
+versions the plugin fails to load with a visible error. Pin the exact version
+`@bergetai/opencode-auth@1.1.1` to keep using it on older V1 releases — the `@1`
+dist-tag now resolves to the 1.2.x line, which requires V1 ≥ 1.3.4.
 
 ### Coming from OpenCode V1 on V2?
 
@@ -84,7 +85,7 @@ V1's `auth.json` into V2's credential store when OpenCode exposes the import sur
 (V2 2.0.22 does not yet — see [docs/auth.md](docs/auth.md); until then, log in once via
 `/connect`). Once imported, token refresh is handled by the framework; refreshes made
 while on V2 are not written back to V1's store, so a long V2 session may require one
-re-login if you later downgrade to `@1`.
+re-login if you later downgrade to 1.1.x.
 
 ## How It Works
 

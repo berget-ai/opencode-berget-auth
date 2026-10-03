@@ -17,7 +17,8 @@
  * All `src/v2/` imports of the SDK are type-only (enforced by a unit test).
  *
  * V1 CLIs older than 1.3.4 cannot load object-form default exports — users on
- * those versions must pin `@bergetai/opencode-auth@1`.
+ * those versions must pin `@bergetai/opencode-auth@1.1.1` (the last release
+ * without the dual export; `@1` now resolves to the 1.2.x line).
  *
  * @example
  * ```json
