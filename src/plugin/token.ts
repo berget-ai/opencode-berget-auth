@@ -8,7 +8,8 @@ import type { OAuthAuthDetails, PluginInput, RefreshResult } from './types';
 
 import { getTokenRefreshEndpoint } from '../constants';
 import { accessTokenExpired, isOAuthAuth } from './auth';
-import { logDebug } from './debug';
+import { logDebug, logError } from './debug';
+import { resilientFetch } from './resilient-fetch';
 
 // Track in-flight refresh requests to prevent duplicates
 const refreshInFlight = new Map<string, Promise<RefreshResult>>();
@@ -85,24 +86,19 @@ function buildRefreshResult(
 
 /**
  * Handles the HTTP error response from the token refresh endpoint.
- * Decides whether to retry (5xx), recover from disk (invalid_grant), or fail.
+ * Decides whether to recover from disk (invalid_grant) or fail.
+ *
+ * Note: 5xx retries are handled by resilientFetch at the transport layer.
+ * This function only handles domain-level errors (invalid_grant, etc.).
  */
 async function handleErrorResponse(
   response: Response,
   errorText: string,
-  attempt: number,
+  _attempt: number,
   auth: OAuthAuthDetails,
   client: PluginInput['client'] | undefined,
   getAuth: (() => Promise<Auth>) | undefined,
 ): Promise<RefreshResult> {
-  // Retry transient 5xx errors (up to 2 attempts total)
-  if (response.status >= 500 && attempt <= 2) {
-    const delay = attempt === 1 ? 500 : 1500;
-    logDebug(`Refresh got HTTP ${response.status}, retrying in ${delay}ms...`);
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    return refreshAccessTokenInternal(auth, client, getAuth, attempt + 1);
-  }
-
   // Handle revoked/invalid refresh token
   if (response.status === 401 || response.status === 400) {
     const errorData = parseErrorResponse(errorText);
@@ -125,7 +121,7 @@ async function handleErrorResponse(
     return { reason: `Token refresh failed: HTTP ${response.status}`, success: false };
   }
 
-  // Other errors - might be temporary
+  // 5xx errors have already been retried by resilientFetch
   return { reason: `Token refresh failed: HTTP ${response.status}`, success: false };
 }
 
@@ -176,6 +172,12 @@ async function persistRefreshedToken(
 
 /**
  * Internal implementation of token refresh
+ *
+ * Uses resilientFetch which retries transient network errors (ECONNRESET,
+ * ETIMEDOUT, socket hang up) and server errors (502/503/504) with
+ * exponential backoff and jitter. The attempt parameter is kept for
+ * backward compatibility with handleErrorResponse but is always 1 now
+ * since resilientFetch handles transport-level retries.
  */
 async function refreshAccessTokenInternal(
   auth: OAuthAuthDetails,
@@ -186,7 +188,7 @@ async function refreshAccessTokenInternal(
   logDebug('Refreshing access token');
 
   try {
-    const response = await fetch(getTokenRefreshEndpoint(), {
+    const response = await resilientFetch(getTokenRefreshEndpoint(), {
       body: JSON.stringify({
         refresh_token: auth.refresh,
       }),
@@ -206,7 +208,7 @@ async function refreshAccessTokenInternal(
     return buildRefreshResult(data, auth, client);
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'Unknown network error';
-    console.error('Failed to refresh Berget access token:', error);
+    logError('Failed to refresh Berget access token after retries', error);
     return { reason: `Network error: ${reason}`, success: false };
   }
 }

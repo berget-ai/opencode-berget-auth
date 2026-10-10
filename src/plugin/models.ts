@@ -4,6 +4,7 @@
 
 import { getModelsEndpoint } from '../constants';
 import { logDebug, logError } from './debug';
+import { resilientFetch } from './resilient-fetch';
 
 // Response from /v1/models/chat endpoint
 interface ChatModel {
@@ -49,7 +50,7 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
   logDebug('Fetching chat models from Berget API');
 
   try {
-    const response = await fetch(getModelsEndpoint(), {
+    const response = await resilientFetch(getModelsEndpoint(), {
       headers: {
         'Content-Type': 'application/json',
       },

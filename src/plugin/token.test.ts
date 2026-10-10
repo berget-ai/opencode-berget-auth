@@ -350,8 +350,8 @@ describe('refreshAccessTokenDirect', () => {
     if (result.success) throw new Error('result should be failure');
     expect(result.reason).toBe('Network error: Network failure');
     expect(errorSpy).toHaveBeenCalledWith(
-      'Failed to refresh Berget access token:',
-      expect.any(Error),
+      expect.stringContaining('Failed to refresh Berget access token after retries'),
+      expect.anything(),
     );
   });
 
@@ -476,7 +476,8 @@ describe('refreshAccessTokenDirect', () => {
     expect(result.reason).toBe('Invalid token response from refresh endpoint');
   });
 
-  // Issue #7 regression: retry on transient 5xx
+  // Issue #7 regression: retry on transient 503
+  // Now handled by resilientFetch with exponential backoff + jitter
   it('retries once on 503 and succeeds on second attempt', async () => {
     let callCount = 0;
 
@@ -512,11 +513,11 @@ describe('refreshAccessTokenDirect', () => {
     expect(result.success).toBe(true);
     if (!result.success) throw new Error('result should be success');
     expect(result.auth.access).toBe('retried-token');
-    // Should have taken at least one retry delay (~500ms)
-    expect(elapsed).toBeGreaterThanOrEqual(400);
+    // Should have taken at least one retry delay with jitter (base 500ms, min ~250ms)
+    expect(elapsed).toBeGreaterThanOrEqual(200);
   });
 
-  it('gives up after two consecutive 503 failures', async () => {
+  it('gives up after resilientFetch retries on persistent 503', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -540,8 +541,9 @@ describe('refreshAccessTokenDirect', () => {
     expect(result.success).toBe(false);
     if (result.success) throw new Error('result should be failure');
     expect(result.reason).toContain('503');
-    // Should have taken two retry delays (~500 + ~1500 = ~2000ms)
-    expect(elapsed).toBeGreaterThanOrEqual(1500);
+    // resilientFetch retries with exponential backoff + jitter (base 500ms)
+    // 3 retries: ~250ms + ~500ms + ~1000ms minimum
+    expect(elapsed).toBeGreaterThanOrEqual(500);
   });
 
   it('recovers from invalid_grant when disk has a valid token', async () => {
