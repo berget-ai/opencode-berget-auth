@@ -188,6 +188,27 @@ describe('setupBergetAuth periodic refresh', () => {
     expect(refreshModels).toHaveBeenCalledTimes(2);
   });
 
+  it('skips the refresh when the fetch fails (empty catalog), keeping models enabled', async () => {
+    const refreshModels = vi.fn(async () => {});
+    vi.doMock('./provider', () => ({
+      // fetchV2Models returns [] on network failure / non-200
+      fetchV2Models: vi.fn(async () => []),
+      refreshModels,
+      registerProvider: vi.fn(async () => {}),
+    }));
+    vi.doMock('./integration', () => ({ registerIntegration: vi.fn(async () => {}) }));
+    vi.doMock('./migrate', () => ({ importV1Credential: vi.fn(async () => {}) }));
+
+    const { setupBergetAuth } = await import('./setup');
+    const cleanup = await setupBergetAuth(createMockContext([]).context);
+
+    await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+    // The refresh must NOT run with an empty catalog: mergeModels would
+    // otherwise disable every known model on a transient API failure.
+    expect(refreshModels).not.toHaveBeenCalled();
+    cleanup?.();
+  });
+
   it('honors BERGET_MODELS_REFRESH_MS so tests and staging can shorten the interval', async () => {
     process.env['BERGET_MODELS_REFRESH_MS'] = '100';
     const refreshModels = vi.fn(async () => {});

@@ -35,7 +35,17 @@ export async function setupBergetAuth(context: Plugin.Context): Promise<(() => v
   const intervalMs = getRefreshIntervalMs();
   const timer = setInterval(() => {
     void fetchV2Models()
-      .then((fresh) => refreshModels(context, fresh))
+      .then((fresh) => {
+        // fetchV2Models() returns [] on failure (network error, non-200).
+        // Treating that as an authoritative empty catalog would disable
+        // every model on the next merge — skip the cycle instead and keep
+        // the last known-good inventory until the API recovers.
+        if (fresh.length === 0) {
+          logError('Skipping model refresh: empty catalog (fetch failed or no models)');
+          return;
+        }
+        return refreshModels(context, fresh);
+      })
       .catch((error: unknown) => logError('Periodic model refresh failed', error));
   }, intervalMs);
 
