@@ -82,6 +82,42 @@ describe('mergeModels', () => {
     expect(merged.map((m) => m.id)).toEqual(['native/old', 'api/same', 'brand/new']);
   });
 
+  it('preserves native reasoning controls and variants when the live model wins', () => {
+    // models.dev knows Kimi-K3.1-Pro supports thinking; /chat has no such
+    // field. After a merge the model must still offer /thinking + /variants.
+    const native = {
+      ...makeModel('moonshotai/Kimi-K3.1-Pro'),
+      capabilities: {
+        input: ['text'],
+        output: ['text'],
+        reasoning: { effort: ['low', 'high'], supported: true, toggle: true },
+        tools: true,
+      },
+      name: 'Kimi K3.1 Pro',
+      variants: [
+        { id: 'high', settings: {} },
+        { id: 'low', settings: {} },
+      ],
+    } as unknown as Model.Info;
+    const fresh = {
+      ...makeModel('moonshotai/Kimi-K3.1-Pro'),
+      capabilities: { input: ['text', 'image'], output: ['text'], tools: true },
+      name: 'moonshotai/Kimi-K3.1-Pro',
+      variants: [],
+    } as unknown as Model.Info;
+
+    const [merged] = mergeModels([native], [fresh]);
+
+    expect(merged?.capabilities.input).toEqual(['text', 'image']);
+    expect((merged?.capabilities as Record<string, unknown>).reasoning).toEqual({
+      effort: ['low', 'high'],
+      supported: true,
+      toggle: true,
+    });
+    expect(merged?.variants.map((v) => v.id)).toEqual(['high', 'low']);
+    expect(merged?.name).toBe('Kimi K3.1 Pro');
+  });
+
   it('marks models.dev-only entries disabled when the live catalog drops them', () => {
     // e.g. moonshotai/Kimi-K3: removed upstream but still present in models.dev
     const existing = [makeModel('moonshotai/Kimi-K3')];

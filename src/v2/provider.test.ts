@@ -116,6 +116,36 @@ describe('fetchV2Models', () => {
     expect(model?.limit.output).toBe(65_536);
   });
 
+  it('builds reasoning variants from the API-declared effort levels', async () => {
+    mockFetchModelsResponse({
+      data: {
+        models: [
+          {
+            contextWindow: 327_680,
+            id: 'moonshotai/Kimi-K3.1-Pro',
+            reasoningEfforts: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+          },
+        ],
+      },
+      ok: true,
+    });
+
+    const [model] = await fetchV2Models();
+    expect(model?.variants.map((variant) => variant.id)).toEqual([
+      'none',
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+    ]);
+    expect(model?.variants.find((variant) => variant.id === 'high')).toMatchObject({
+      body: { reasoning_effort: 'high' },
+    });
+    expect((model?.capabilities as Record<string, unknown>).reasoning).toEqual({ supported: true });
+  });
+
   it('excludes models without a numeric contextWindow instead of defaulting to 0', async () => {
     mockFetchModelsResponse({
       data: {

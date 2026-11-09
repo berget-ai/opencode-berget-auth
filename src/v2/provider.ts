@@ -41,6 +41,12 @@ interface ChatModel {
   /** Deployment default max_tokens; undefined = DEFAULT_OUTPUT_LIMIT. */
   maxOutputTokens?: number;
   outputPricePerToken?: number;
+  /**
+   * Reasoning effort levels from inference-api (REASONING_MAPS). Each level
+   * becomes a variant that sends `reasoning_effort: <level>` in the request
+   * body; the chat-completion pipeline maps it to provider-native params.
+   */
+  reasoningEfforts?: string[];
 }
 
 interface ChatModelsResponse {
@@ -89,14 +95,35 @@ export function mergeModels(
   existing: readonly Model.Info[],
   fresh: readonly Model.Info[],
 ): Model.Info[] {
-  const freshIds = new Set(fresh.map((model) => model.id));
+  const nativeById = new Map(existing.map((model) => [model.id, model]));
   const byId = new Map<string, Model.Info>();
 
   for (const model of existing) {
-    if (freshIds.has(model.id)) continue;
+    if (nativeById.has(model.id) && fresh.some((f) => f.id === model.id)) continue;
     byId.set(model.id, { ...model, enabled: false });
   }
-  for (const model of fresh) byId.set(model.id, model);
+  for (const model of fresh) {
+    const native = nativeById.get(model.id);
+    if (!native) {
+      byId.set(model.id, model);
+      continue;
+    }
+
+    // Live data (context/prices/vision) wins, but the richer models.dev
+    // metadata we don't get from /chat (reasoning controls, thinking
+    // variants, friendly name) must survive the override — otherwise
+    // /thinking and /variants break after the first refresh.
+    byId.set(model.id, {
+      ...native,
+      ...model,
+      capabilities: {
+        ...native.capabilities,
+        ...model.capabilities,
+      },
+      name: native.name ?? model.name,
+      variants: model.variants?.length ? model.variants : native.variants,
+    });
+  }
 
   return [...byId.values()];
 }
@@ -189,7 +216,16 @@ function toModelInfo(providerID: string, model: ChatModel & { contextWindow: num
 
   return {
     // Model.Info ids are branded plain strings at runtime; no SDK executes here.
-    capabilities: { input, output: ['text'], tools: true },
+    capabilities: {
+      input,
+      output: ['text'],
+      ...(model.reasoningEfforts?.length
+        ? // Marks the model as reasoning-capable; the explicit variants below
+          // carry the actual levels, so no auto-variant controls are needed.
+          { reasoning: { supported: true } }
+        : {}),
+      tools: true,
+    },
     cost: [
       {
         cache: {
@@ -215,6 +251,12 @@ function toModelInfo(providerID: string, model: ChatModel & { contextWindow: num
     providerID,
     status: 'active',
     time: { released: 0 },
-    variants: [],
+    variants: (model.reasoningEfforts ?? []).map((effort) => ({
+      // Each variant injects reasoning_effort into the request body; the
+      // chat-completion pipeline converts it to native params. The `none`
+      // level doubles as the off-switch for /thinking.
+      body: { reasoning_effort: effort },
+      id: effort,
+    })),
   } as unknown as Model.Info;
 }
