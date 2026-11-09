@@ -276,7 +276,7 @@ describe('registerProvider', () => {
     expect((provider.settings as Record<string, string>).baseURL).toBe('https://stage.test/v1');
   });
 
-  it('does not re-set models the native catalog already defines', async () => {
+  it('keeps the same model inventory when the live catalog matches the native one', async () => {
     const known = new Map([
       ['moonshotai/Kimi-K3', makeModel('moonshotai/Kimi-K3')],
       ['qwen/qwen-model', makeModel('qwen/qwen-model')],
@@ -287,6 +287,10 @@ describe('registerProvider', () => {
     await registerProvider(captured.context, models);
 
     expect(captured.editor.updates).toHaveLength(1);
-    expect(captured.editor.modelSets).toHaveLength(0);
+    // mergeModels always sets the merged inventory; nothing is disabled when
+    // every native model is still listed by the live catalog.
+    expect(captured.editor.modelSets).toHaveLength(1);
+    const set = captured.editor.modelSets[0];
+    expect(set.models.map((model) => model.id)).toEqual(['moonshotai/Kimi-K3', 'qwen/qwen-model']);
   });
 });

@@ -81,6 +81,19 @@ describe('mergeModels', () => {
 
     expect(merged.map((m) => m.id)).toEqual(['native/old', 'api/same', 'brand/new']);
   });
+
+  it('marks models.dev-only entries disabled when the live catalog drops them', () => {
+    // e.g. moonshotai/Kimi-K3: removed upstream but still present in models.dev
+    const existing = [makeModel('moonshotai/Kimi-K3')];
+    const fresh = [makeModel('moonshotai/Kimi-K3.1-Pro')];
+
+    const merged = mergeModels(existing, fresh);
+
+    const retired = merged.find((m) => m.id === 'moonshotai/Kimi-K3');
+    expect(retired?.enabled).toBe(false);
+    const current = merged.find((m) => m.id === 'moonshotai/Kimi-K3.1-Pro');
+    expect(current?.enabled).toBe(true);
+  });
 });
 
 describe('refreshModels', () => {

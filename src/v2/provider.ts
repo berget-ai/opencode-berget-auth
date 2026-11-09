@@ -36,6 +36,8 @@ interface ChatModel {
   contextWindow?: number;
   id: string;
   inputPricePerToken?: number;
+  /** Live lifecycle state from inference-api; `deprecated` maps to disabled. */
+  lifecycleState?: string;
   /** Deployment default max_tokens; undefined = DEFAULT_OUTPUT_LIMIT. */
   maxOutputTokens?: number;
   outputPricePerToken?: number;
@@ -76,17 +78,26 @@ export async function fetchV2Models(): Promise<Model.Info[]> {
 /**
  * Merge the fetched catalog with the models OpenCode already knows for the
  * provider (models.dev definitions are richer). The freshly fetched model
- * win on id collision so new deployments appear immediately; models the API
- * no longer lists stay if only models.dev knows them, so a transient fetch
- * instance never removes working models.
+ * wins on id collision so new deployments appear immediately.
+ *
+ * The live API catalog is authoritative for availability: models that only
+ * models.dev knows (i.e. removed upstream, like moonshotai/Kimi-K3) are kept
+ * but marked `enabled: false`, so the selector no longer offers them while a
+ * temporary API problem doesn't wipe their metadata permanently.
  */
 export function mergeModels(
   existing: readonly Model.Info[],
   fresh: readonly Model.Info[],
 ): Model.Info[] {
+  const freshIds = new Set(fresh.map((model) => model.id));
   const byId = new Map<string, Model.Info>();
-  for (const model of existing) byId.set(model.id, model);
+
+  for (const model of existing) {
+    if (freshIds.has(model.id)) continue;
+    byId.set(model.id, { ...model, enabled: false });
+  }
   for (const model of fresh) byId.set(model.id, model);
+
   return [...byId.values()];
 }
 
@@ -148,11 +159,7 @@ export function registerProvider(
         }
       });
 
-      const known = new Set(existing.models.keys());
-      const missing = models.filter((model) => !known.has(model.id));
-      if (missing.length > 0) {
-        editor.models.set(BERGET_PROVIDER_ID, [...existing.models.values(), ...missing]);
-      }
+      editor.models.set(BERGET_PROVIDER_ID, mergeModels([...existing.models.values()], models));
       return;
     }
 
@@ -194,7 +201,10 @@ function toModelInfo(providerID: string, model: ChatModel & { contextWindow: num
         output: (model.outputPricePerToken ?? 0) * 1_000_000,
       },
     ],
-    enabled: true,
+    // Retired models are disabled, not deleted: keeping their native
+    // models.dev definitions means a temporary catalog outage or an upstream
+    // re-list restores them on the next refresh.
+    enabled: model.lifecycleState !== 'deprecated',
     id: model.id,
     limit: {
       context: model.contextWindow,
