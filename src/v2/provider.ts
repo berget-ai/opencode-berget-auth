@@ -26,9 +26,18 @@ const PROVIDER_PACKAGE = '@opencode/ai/providers/openai-compatible';
 const DEFAULT_OUTPUT_LIMIT = 8192;
 
 interface ChatModel {
+  /** Per-token cached-prompt price from Lago's cached_input filter. */
+  cachedInputPricePerToken?: number;
+  /**
+   * Capability flags from newer inference-api versions. Older deployments
+   * omit it, in which case the VISION_MODELS whitelist is the fallback.
+   */
+  capabilities?: { vision?: boolean };
   contextWindow?: number;
   id: string;
   inputPricePerToken?: number;
+  /** Deployment default max_tokens; undefined = DEFAULT_OUTPUT_LIMIT. */
+  maxOutputTokens?: number;
   outputPricePerToken?: number;
 }
 
@@ -62,6 +71,57 @@ export async function fetchV2Models(): Promise<Model.Info[]> {
     logError('Error fetching V2 models', error);
     return [];
   }
+}
+
+/**
+ * Merge the fetched catalog with the models OpenCode already knows for the
+ * provider (models.dev definitions are richer). The freshly fetched model
+ * win on id collision so new deployments appear immediately; models the API
+ * no longer lists stay if only models.dev knows them, so a transient fetch
+ * instance never removes working models.
+ */
+export function mergeModels(
+  existing: readonly Model.Info[],
+  fresh: readonly Model.Info[],
+): Model.Info[] {
+  const byId = new Map<string, Model.Info>();
+  for (const model of existing) byId.set(model.id, model);
+  for (const model of fresh) byId.set(model.id, model);
+  return [...byId.values()];
+}
+
+/**
+ * Re-reads the provider editor, merges in freshly fetched models and marks
+ * the provider registry for rebuild via `reload()`. Run this on an interval
+ * so new models appear (and prices update) without a CLI restart.
+ */
+export async function refreshModels(
+  context: Plugin.Context,
+  models: readonly Model.Info[],
+): Promise<void> {
+  await context.provider.transform((editor) => {
+    const existing = editor.get(BERGET_PROVIDER_ID);
+    if (!existing) {
+      // Refresh before the initial registration — no-op; registration owns
+      // the initial population.
+      return;
+    }
+
+    editor.update(BERGET_PROVIDER_ID, (provider) => {
+      provider.integrationID = BERGET_PROVIDER_ID as unknown as typeof provider.integrationID;
+      provider.activation = 'enabled';
+      const baseURL = process.env.BERGET_INFERENCE_URL;
+      if (baseURL) {
+        provider.settings = { ...provider.settings, baseURL };
+      }
+    });
+
+    editor.models.set(BERGET_PROVIDER_ID, mergeModels([...existing.models.values()], models));
+  });
+
+  // Provider changes invalidate the whole model result — the next read
+  // rebuilds it from every active transform (docs: build/plugins/server).
+  await context.provider.reload();
 }
 
 /**
@@ -115,14 +175,20 @@ function hasContextWindow(model: ChatModel): model is ChatModel & { contextWindo
 }
 
 function toModelInfo(providerID: string, model: ChatModel & { contextWindow: number }): Model.Info {
-  const input = VISION_MODELS.has(model.id) ? ['text', 'image'] : ['text'];
+  // Prefer the capability declared by the API; keep the hardcoded whitelist
+  // as a fallback for older inference-api deployments without capabilities.
+  const vision = model.capabilities?.vision === true || VISION_MODELS.has(model.id);
+  const input = vision ? ['text', 'image'] : ['text'];
 
   return {
     // Model.Info ids are branded plain strings at runtime; no SDK executes here.
     capabilities: { input, output: ['text'], tools: true },
     cost: [
       {
-        cache: { read: 0, write: 0 },
+        cache: {
+          read: (model.cachedInputPricePerToken ?? 0) * 1_000_000,
+          write: 0,
+        },
         // API reports USD per token; Model.Info costs are USD per million.
         input: (model.inputPricePerToken ?? 0) * 1_000_000,
         output: (model.outputPricePerToken ?? 0) * 1_000_000,
@@ -130,7 +196,10 @@ function toModelInfo(providerID: string, model: ChatModel & { contextWindow: num
     ],
     enabled: true,
     id: model.id,
-    limit: { context: model.contextWindow, output: DEFAULT_OUTPUT_LIMIT },
+    limit: {
+      context: model.contextWindow,
+      output: model.maxOutputTokens ?? DEFAULT_OUTPUT_LIMIT,
+    },
     modelID: model.id,
     name: model.id,
     providerID,

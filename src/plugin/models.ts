@@ -7,11 +7,19 @@ import { logDebug, logError } from './debug';
 
 // Response from /v1/models/chat endpoint
 interface ChatModel {
-  aliases?: string[];
+  /** Per-token cached-prompt price from Lago's cached_input filter. */
+  cachedInputPricePerToken?: number;
+  /**
+   * Capability flags — from recent inference-api versions. Older deployments
+   * omit it, in which case VISION_MODELS is the fallback.
+   */
+  capabilities?: { vision?: boolean };
   contextWindow: number;
   id: string;
   inputPricePerToken: number;
   lifecycleState?: string;
+  /** Max output tokens (deployment default); undefined = client default. */
+  maxOutputTokens?: number;
   outputPricePerToken: number;
 }
 
@@ -72,8 +80,9 @@ export async function fetchBergetModels(): Promise<Record<string, object>> {
         name: model.id,
       };
 
-      // Enable vision support for models that support image input
-      if (VISION_MODELS.has(model.id)) {
+      // Enable vision support: prefer the declared capability from the API,
+      // fall back to the hardcoded whitelist for older deployments.
+      if (model.capabilities?.vision === true || VISION_MODELS.has(model.id)) {
         modelConfig.attachment = true;
         modelConfig.modalities = {
           input: ['text', 'image'],

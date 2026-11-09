@@ -67,6 +67,55 @@ describe('fetchV2Models', () => {
     expect(kimi?.capabilities.input).toEqual(['text', 'image']);
   });
 
+  it('marks models vision-capable from the API-declared capability, whitelist-free', async () => {
+    mockFetchModelsResponse({
+      data: {
+        models: [
+          {
+            capabilities: { vision: true },
+            contextWindow: 131_072,
+            id: 'moonshotai/Kimi-K3.1-Pro',
+            maxOutputTokens: 32_768,
+          },
+          { capabilities: { vision: false }, contextWindow: 1, id: 'text-only/model' },
+        ],
+      },
+      ok: true,
+    });
+
+    const models = await fetchV2Models();
+    const kimi = models.find((model) => model.id === 'moonshotai/Kimi-K3.1-Pro');
+
+    // Not in VISION_MODELS — the API capability flag decides.
+    expect(VISION_MODELS.has('moonshotai/Kimi-K3.1-Pro')).toBe(false);
+    expect(kimi?.capabilities.input).toEqual(['text', 'image']);
+    expect(kimi?.limit.output).toBe(32_768);
+    expect(models.find((model) => model.id === 'text-only/model')?.capabilities.input).toEqual([
+      'text',
+    ]);
+  });
+
+  it('maps cached-input pricing and respects API maxOutputTokens over the default', async () => {
+    mockFetchModelsResponse({
+      data: {
+        models: [
+          {
+            cachedInputPricePerToken: 0.000_000_8,
+            contextWindow: 10_000,
+            id: 'cached/model',
+            // explicit maxOutputTokens wins over DEFAULT_OUTPUT_LIMIT
+            maxOutputTokens: 65_536,
+          },
+        ],
+      },
+      ok: true,
+    });
+
+    const [model] = await fetchV2Models();
+    expect(model?.cost[0].cache.read).toBeCloseTo(0.8, 10);
+    expect(model?.limit.output).toBe(65_536);
+  });
+
   it('excludes models without a numeric contextWindow instead of defaulting to 0', async () => {
     mockFetchModelsResponse({
       data: {
