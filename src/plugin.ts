@@ -21,13 +21,18 @@ import { logDebug, logError } from './plugin/debug';
 import { createDeviceAuthorizeMethod } from './plugin/device-flow';
 import { fetchBergetModels } from './plugin/models';
 import { createPkceAuthorizeMethod } from './plugin/pkce-flow';
+import { resilientFetch } from './plugin/resilient-fetch';
 import { refreshAccessTokenDirect } from './plugin/token';
 
 type FetchInput = Request | string | URL;
 
 /**
- * Wraps a native fetch call while preserving headers from both Request
+ * Wraps a resilient fetch call while preserving headers from both Request
  * objects and init, then injecting (or overwriting) Authorization.
+ *
+ * Uses resilientFetch which retries transient network errors (ECONNRESET,
+ * ETIMEDOUT, socket hang up) and server errors (502/503/504) with
+ * exponential backoff and jitter.
  */
 async function fetchWithAuth(
   authToken: string,
@@ -39,7 +44,7 @@ async function fetchWithAuth(
 
   const headers = new Headers(request.headers);
   headers.set('Authorization', `Bearer ${authToken}`);
-  return fetch(request, { headers });
+  return resilientFetch(request, { headers });
 }
 
 /**
