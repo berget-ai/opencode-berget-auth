@@ -26,15 +26,44 @@ const PROVIDER_PACKAGE = '@opencode/ai/providers/openai-compatible';
 const DEFAULT_OUTPUT_LIMIT = 8192;
 
 interface ChatModel {
+  /** Per-token cached-prompt price from Lago's cached_input filter. */
+  cachedInputPricePerToken?: number;
+  /**
+   * Capability flags from newer inference-api versions. Older deployments
+   * omit it, in which case the VISION_MODELS whitelist is the fallback.
+   */
+  capabilities?: { vision?: boolean };
   contextWindow?: number;
   id: string;
   inputPricePerToken?: number;
+  /** Live lifecycle state from inference-api; `deprecated` maps to disabled. */
+  lifecycleState?: string;
+  /** Deployment default max_tokens; undefined = DEFAULT_OUTPUT_LIMIT. */
+  maxOutputTokens?: number;
   outputPricePerToken?: number;
+  /**
+   * Reasoning effort levels from inference-api (REASONING_MAPS). Each level
+   * becomes a variant that sends `reasoning_effort: <level>` in the request
+   * body; the chat-completion pipeline maps it to provider-native params.
+   */
+  reasoningEfforts?: string[];
 }
 
 interface ChatModelsResponse {
   models: ChatModel[];
 }
+
+/**
+ * Shared provider binding applied by both registerProvider() and
+ * refreshModels(): credential binding + always-on activation + the optional
+ * BERGET_INFERENCE_URL override. Single implementation so the two paths
+ * cannot drift.
+ */
+type MutableProvider = {
+  activation?: string;
+  integrationID?: unknown;
+  settings?: Record<string, unknown>;
+};
 
 /**
  * Fetches the live chat-model catalog (unauthenticated, like V1). Returns an
@@ -65,6 +94,91 @@ export async function fetchV2Models(): Promise<Model.Info[]> {
 }
 
 /**
+ * Merge the fetched catalog with the models OpenCode already knows for the
+ * provider (models.dev definitions are richer). The freshly fetched model
+ * wins on id collision so new deployments appear immediately.
+ *
+ * The live API catalog is authoritative for availability: models that only
+ * models.dev knows (i.e. removed upstream, like moonshotai/Kimi-K3) are kept
+ * but marked `enabled: false`, so the selector no longer offers them while a
+ * temporary API problem doesn't wipe their metadata permanently.
+ *
+ * Safety: an empty fresh catalog (network failure or non-200 in
+ * fetchV2Models) is never treated as authoritative — the existing inventory
+ * is returned unchanged. This guard applies at setup-time registration as
+ * well as the periodic refresh, so a transient API outage can never disable
+ * every model.
+ */
+export function mergeModels(
+  existing: readonly Model.Info[],
+  fresh: readonly Model.Info[],
+): Model.Info[] {
+  if (fresh.length === 0 && existing.length > 0) {
+    return [...existing];
+  }
+
+  const freshIds = new Set(fresh.map((model) => model.id));
+  const nativeById = new Map(existing.map((model) => [model.id, model]));
+  const byId = new Map<string, Model.Info>();
+
+  for (const model of existing) {
+    if (freshIds.has(model.id)) continue;
+    byId.set(model.id, { ...model, enabled: false });
+  }
+  for (const model of fresh) {
+    const native = nativeById.get(model.id);
+    if (!native) {
+      byId.set(model.id, model);
+      continue;
+    }
+
+    // Live data (context/prices/vision) wins, but the richer models.dev
+    // metadata we don't get from /chat (reasoning controls, thinking
+    // variants, friendly name) must survive the override — otherwise
+    // /thinking and /variants break after the first refresh.
+    byId.set(model.id, {
+      ...native,
+      ...model,
+      capabilities: {
+        ...native.capabilities,
+        ...model.capabilities,
+      },
+      name: native.name ?? model.name,
+      variants: model.variants?.length ? model.variants : native.variants,
+    });
+  }
+
+  return [...byId.values()];
+}
+
+/**
+ * Re-reads the provider editor, merges in freshly fetched models and marks
+ * the provider registry for rebuild via `reload()`. Run this on an interval
+ * so new models appear (and prices update) without a CLI restart.
+ */
+export async function refreshModels(
+  context: Plugin.Context,
+  models: readonly Model.Info[],
+): Promise<void> {
+  await context.provider.transform((editor) => {
+    const existing = editor.get(BERGET_PROVIDER_ID);
+    if (!existing) {
+      // Refresh before the initial registration — no-op; registration owns
+      // the initial population.
+      return;
+    }
+
+    editor.update(BERGET_PROVIDER_ID, applyProviderBinding);
+
+    editor.models.set(BERGET_PROVIDER_ID, mergeModels([...existing.models.values()], models));
+  });
+
+  // Provider changes invalidate the whole model result — the next read
+  // rebuilds it from every active transform (docs: build/plugins/server).
+  await context.provider.reload();
+}
+
+/**
  * Registers the provider. Existing definitions (models.dev) are updated in
  * place — binding + activation + optional env override — and only models
  * missing from the native catalog are added. A missing provider is added from
@@ -80,19 +194,9 @@ export function registerProvider(
     const baseURL = process.env.BERGET_INFERENCE_URL;
 
     if (existing) {
-      editor.update(BERGET_PROVIDER_ID, (provider) => {
-        provider.integrationID = BERGET_PROVIDER_ID as unknown as typeof provider.integrationID;
-        provider.activation = 'enabled';
-        if (baseURL) {
-          provider.settings = { ...provider.settings, baseURL };
-        }
-      });
+      editor.update(BERGET_PROVIDER_ID, applyProviderBinding);
 
-      const known = new Set(existing.models.keys());
-      const missing = models.filter((model) => !known.has(model.id));
-      if (missing.length > 0) {
-        editor.models.set(BERGET_PROVIDER_ID, [...existing.models.values(), ...missing]);
-      }
+      editor.models.set(BERGET_PROVIDER_ID, mergeModels([...existing.models.values()], models));
       return;
     }
 
@@ -110,32 +214,68 @@ export function registerProvider(
   });
 }
 
+function applyProviderBinding(provider: MutableProvider): void {
+  provider.integrationID = BERGET_PROVIDER_ID;
+  provider.activation = 'enabled';
+  const baseURL = process.env.BERGET_INFERENCE_URL;
+  if (baseURL) {
+    provider.settings = { ...provider.settings, baseURL };
+  }
+}
+
 function hasContextWindow(model: ChatModel): model is ChatModel & { contextWindow: number } {
   return Number.isFinite(model.contextWindow);
 }
 
 function toModelInfo(providerID: string, model: ChatModel & { contextWindow: number }): Model.Info {
-  const input = VISION_MODELS.has(model.id) ? ['text', 'image'] : ['text'];
+  // Prefer the capability declared by the API; keep the hardcoded whitelist
+  // as a fallback for older inference-api deployments without capabilities.
+  const vision = model.capabilities?.vision === true || VISION_MODELS.has(model.id);
+  const input = vision ? ['text', 'image'] : ['text'];
 
   return {
     // Model.Info ids are branded plain strings at runtime; no SDK executes here.
-    capabilities: { input, output: ['text'], tools: true },
+    capabilities: {
+      input,
+      output: ['text'],
+      ...(model.reasoningEfforts?.length
+        ? // Marks the model as reasoning-capable; the explicit variants below
+          // carry the actual levels, so no auto-variant controls are needed.
+          { reasoning: { supported: true } }
+        : {}),
+      tools: true,
+    },
     cost: [
       {
-        cache: { read: 0, write: 0 },
+        cache: {
+          read: (model.cachedInputPricePerToken ?? 0) * 1_000_000,
+          write: 0,
+        },
         // API reports USD per token; Model.Info costs are USD per million.
         input: (model.inputPricePerToken ?? 0) * 1_000_000,
         output: (model.outputPricePerToken ?? 0) * 1_000_000,
       },
     ],
-    enabled: true,
+    // Retired models are disabled, not deleted: keeping their native
+    // models.dev definitions means a temporary catalog outage or an upstream
+    // re-list restores them on the next refresh.
+    enabled: model.lifecycleState !== 'deprecated',
     id: model.id,
-    limit: { context: model.contextWindow, output: DEFAULT_OUTPUT_LIMIT },
+    limit: {
+      context: model.contextWindow,
+      output: model.maxOutputTokens ?? DEFAULT_OUTPUT_LIMIT,
+    },
     modelID: model.id,
     name: model.id,
     providerID,
     status: 'active',
     time: { released: 0 },
-    variants: [],
+    variants: (model.reasoningEfforts ?? []).map((effort) => ({
+      // Each variant injects reasoning_effort into the request body; the
+      // chat-completion pipeline converts it to native params. The `none`
+      // level doubles as the off-switch for /thinking.
+      body: { reasoning_effort: effort },
+      id: effort,
+    })),
   } as unknown as Model.Info;
 }

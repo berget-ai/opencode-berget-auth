@@ -67,6 +67,85 @@ describe('fetchV2Models', () => {
     expect(kimi?.capabilities.input).toEqual(['text', 'image']);
   });
 
+  it('marks models vision-capable from the API-declared capability, whitelist-free', async () => {
+    mockFetchModelsResponse({
+      data: {
+        models: [
+          {
+            capabilities: { vision: true },
+            contextWindow: 131_072,
+            id: 'moonshotai/Kimi-K3.1-Pro',
+            maxOutputTokens: 32_768,
+          },
+          { capabilities: { vision: false }, contextWindow: 1, id: 'text-only/model' },
+        ],
+      },
+      ok: true,
+    });
+
+    const models = await fetchV2Models();
+    const kimi = models.find((model) => model.id === 'moonshotai/Kimi-K3.1-Pro');
+
+    // Not in VISION_MODELS — the API capability flag decides.
+    expect(VISION_MODELS.has('moonshotai/Kimi-K3.1-Pro')).toBe(false);
+    expect(kimi?.capabilities.input).toEqual(['text', 'image']);
+    expect(kimi?.limit.output).toBe(32_768);
+    expect(models.find((model) => model.id === 'text-only/model')?.capabilities.input).toEqual([
+      'text',
+    ]);
+  });
+
+  it('maps cached-input pricing and respects API maxOutputTokens over the default', async () => {
+    mockFetchModelsResponse({
+      data: {
+        models: [
+          {
+            cachedInputPricePerToken: 0.000_000_8,
+            contextWindow: 10_000,
+            id: 'cached/model',
+            // explicit maxOutputTokens wins over DEFAULT_OUTPUT_LIMIT
+            maxOutputTokens: 65_536,
+          },
+        ],
+      },
+      ok: true,
+    });
+
+    const [model] = await fetchV2Models();
+    expect(model?.cost[0].cache.read).toBeCloseTo(0.8, 10);
+    expect(model?.limit.output).toBe(65_536);
+  });
+
+  it('builds reasoning variants from the API-declared effort levels', async () => {
+    mockFetchModelsResponse({
+      data: {
+        models: [
+          {
+            contextWindow: 327_680,
+            id: 'moonshotai/Kimi-K3.1-Pro',
+            reasoningEfforts: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+          },
+        ],
+      },
+      ok: true,
+    });
+
+    const [model] = await fetchV2Models();
+    expect(model?.variants.map((variant) => variant.id)).toEqual([
+      'none',
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+    ]);
+    expect(model?.variants.find((variant) => variant.id === 'high')).toMatchObject({
+      body: { reasoning_effort: 'high' },
+    });
+    expect((model?.capabilities as Record<string, unknown>).reasoning).toEqual({ supported: true });
+  });
+
   it('excludes models without a numeric contextWindow instead of defaulting to 0', async () => {
     mockFetchModelsResponse({
       data: {
@@ -190,6 +269,23 @@ describe('registerProvider', () => {
     expect(set.models.map((model) => model.id)).toEqual(['native-model', 'brand-new-model']);
   });
 
+  it('keeps native models enabled at setup time when the catalog fetch failed (empty list)', async () => {
+    // Regression guard: a transient API failure at CLI start must not mark
+    // every models.dev model enabled: false.
+    const known = new Map([
+      ['moonshotai/Kimi-K3', makeModel('moonshotai/Kimi-K3')],
+      ['qwen/qwen-model', makeModel('qwen/qwen-model')],
+    ]);
+    const captured = createMockContext({ info: {}, models: known });
+
+    await registerProvider(captured.context, []);
+
+    expect(captured.editor.modelSets).toHaveLength(1);
+    const set = captured.editor.modelSets[0];
+    expect(set.models.map((model) => model.id)).toEqual(['moonshotai/Kimi-K3', 'qwen/qwen-model']);
+    expect(set.models.every((model) => model.enabled === true)).toBe(true);
+  });
+
   it('adds the provider from scratch when the registry has none', async () => {
     const captured = createMockContext();
 
@@ -227,7 +323,7 @@ describe('registerProvider', () => {
     expect((provider.settings as Record<string, string>).baseURL).toBe('https://stage.test/v1');
   });
 
-  it('does not re-set models the native catalog already defines', async () => {
+  it('keeps the same model inventory when the live catalog matches the native one', async () => {
     const known = new Map([
       ['moonshotai/Kimi-K3', makeModel('moonshotai/Kimi-K3')],
       ['qwen/qwen-model', makeModel('qwen/qwen-model')],
@@ -238,6 +334,10 @@ describe('registerProvider', () => {
     await registerProvider(captured.context, models);
 
     expect(captured.editor.updates).toHaveLength(1);
-    expect(captured.editor.modelSets).toHaveLength(0);
+    // mergeModels always sets the merged inventory; nothing is disabled when
+    // every native model is still listed by the live catalog.
+    expect(captured.editor.modelSets).toHaveLength(1);
+    const set = captured.editor.modelSets[0];
+    expect(set.models.map((model) => model.id)).toEqual(['moonshotai/Kimi-K3', 'qwen/qwen-model']);
   });
 });
