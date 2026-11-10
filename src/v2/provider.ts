@@ -54,6 +54,18 @@ interface ChatModelsResponse {
 }
 
 /**
+ * Shared provider binding applied by both registerProvider() and
+ * refreshModels(): credential binding + always-on activation + the optional
+ * BERGET_INFERENCE_URL override. Single implementation so the two paths
+ * cannot drift.
+ */
+type MutableProvider = {
+  activation?: string;
+  integrationID?: unknown;
+  settings?: Record<string, unknown>;
+};
+
+/**
  * Fetches the live chat-model catalog (unauthenticated, like V1). Returns an
  * empty list on failure — the native models.dev catalog remains the baseline.
  */
@@ -90,16 +102,27 @@ export async function fetchV2Models(): Promise<Model.Info[]> {
  * models.dev knows (i.e. removed upstream, like moonshotai/Kimi-K3) are kept
  * but marked `enabled: false`, so the selector no longer offers them while a
  * temporary API problem doesn't wipe their metadata permanently.
+ *
+ * Safety: an empty fresh catalog (network failure or non-200 in
+ * fetchV2Models) is never treated as authoritative — the existing inventory
+ * is returned unchanged. This guard applies at setup-time registration as
+ * well as the periodic refresh, so a transient API outage can never disable
+ * every model.
  */
 export function mergeModels(
   existing: readonly Model.Info[],
   fresh: readonly Model.Info[],
 ): Model.Info[] {
+  if (fresh.length === 0 && existing.length > 0) {
+    return [...existing];
+  }
+
+  const freshIds = new Set(fresh.map((model) => model.id));
   const nativeById = new Map(existing.map((model) => [model.id, model]));
   const byId = new Map<string, Model.Info>();
 
   for (const model of existing) {
-    if (nativeById.has(model.id) && fresh.some((f) => f.id === model.id)) continue;
+    if (freshIds.has(model.id)) continue;
     byId.set(model.id, { ...model, enabled: false });
   }
   for (const model of fresh) {
@@ -145,14 +168,7 @@ export async function refreshModels(
       return;
     }
 
-    editor.update(BERGET_PROVIDER_ID, (provider) => {
-      provider.integrationID = BERGET_PROVIDER_ID as unknown as typeof provider.integrationID;
-      provider.activation = 'enabled';
-      const baseURL = process.env.BERGET_INFERENCE_URL;
-      if (baseURL) {
-        provider.settings = { ...provider.settings, baseURL };
-      }
-    });
+    editor.update(BERGET_PROVIDER_ID, applyProviderBinding);
 
     editor.models.set(BERGET_PROVIDER_ID, mergeModels([...existing.models.values()], models));
   });
@@ -178,13 +194,7 @@ export function registerProvider(
     const baseURL = process.env.BERGET_INFERENCE_URL;
 
     if (existing) {
-      editor.update(BERGET_PROVIDER_ID, (provider) => {
-        provider.integrationID = BERGET_PROVIDER_ID as unknown as typeof provider.integrationID;
-        provider.activation = 'enabled';
-        if (baseURL) {
-          provider.settings = { ...provider.settings, baseURL };
-        }
-      });
+      editor.update(BERGET_PROVIDER_ID, applyProviderBinding);
 
       editor.models.set(BERGET_PROVIDER_ID, mergeModels([...existing.models.values()], models));
       return;
@@ -202,6 +212,15 @@ export function registerProvider(
       models: [...models],
     });
   });
+}
+
+function applyProviderBinding(provider: MutableProvider): void {
+  provider.integrationID = BERGET_PROVIDER_ID;
+  provider.activation = 'enabled';
+  const baseURL = process.env.BERGET_INFERENCE_URL;
+  if (baseURL) {
+    provider.settings = { ...provider.settings, baseURL };
+  }
 }
 
 function hasContextWindow(model: ChatModel): model is ChatModel & { contextWindow: number } {

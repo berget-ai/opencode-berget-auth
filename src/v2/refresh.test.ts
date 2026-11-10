@@ -118,6 +118,17 @@ describe('mergeModels', () => {
     expect(merged?.name).toBe('Kimi K3.1 Pro');
   });
 
+  it('returns the existing inventory unchanged when the fresh catalog is empty', () => {
+    // fetchV2Models() returns [] on network failure / non-200. An empty
+    // catalog must never disable the known models — at setup time or later.
+    const existing = [makeModel('moonshotai/Kimi-K3.1-Pro'), makeModel('zai-org/GLM-5.3-Flash')];
+
+    const merged = mergeModels(existing, []);
+
+    expect(merged.map((m) => m.id)).toEqual(existing.map((m) => m.id));
+    expect(merged.every((m) => m.enabled === true)).toBe(true);
+  });
+
   it('marks models.dev-only entries disabled when the live catalog drops them', () => {
     // e.g. moonshotai/Kimi-K3: removed upstream but still present in models.dev
     const existing = [makeModel('moonshotai/Kimi-K3')];

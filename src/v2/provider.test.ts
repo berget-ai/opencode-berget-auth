@@ -269,6 +269,23 @@ describe('registerProvider', () => {
     expect(set.models.map((model) => model.id)).toEqual(['native-model', 'brand-new-model']);
   });
 
+  it('keeps native models enabled at setup time when the catalog fetch failed (empty list)', async () => {
+    // Regression guard: a transient API failure at CLI start must not mark
+    // every models.dev model enabled: false.
+    const known = new Map([
+      ['moonshotai/Kimi-K3', makeModel('moonshotai/Kimi-K3')],
+      ['qwen/qwen-model', makeModel('qwen/qwen-model')],
+    ]);
+    const captured = createMockContext({ info: {}, models: known });
+
+    await registerProvider(captured.context, []);
+
+    expect(captured.editor.modelSets).toHaveLength(1);
+    const set = captured.editor.modelSets[0];
+    expect(set.models.map((model) => model.id)).toEqual(['moonshotai/Kimi-K3', 'qwen/qwen-model']);
+    expect(set.models.every((model) => model.enabled === true)).toBe(true);
+  });
+
   it('adds the provider from scratch when the registry has none', async () => {
     const captured = createMockContext();
 
